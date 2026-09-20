@@ -4,8 +4,6 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { CsvImportPanel } from "@/features/csv-import/components/CsvImportPanel";
 import { requireSession } from "@/features/auth/logic/guards";
 import { formatInTimeZone } from "date-fns-tz";
-import { materializeBoardForDate } from "@/features/operations/services/materialize-after-import";
-import { ensureDefaultRooms } from "@/features/operations/services/ensure-default-rooms";
 import {
   RoomBoardTable,
   type BoardRow,
@@ -18,14 +16,9 @@ export default async function DashboardPage() {
   const locale = ((await cookies()).get("yulios-locale")?.value ?? "es") as Locale;
   const t = dictionary(locale);
   const { supabase, user } = await requireSession();
-  const { data: profile } = await supabase.from("profiles").select("hotel_id, role").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("hotel_id").eq("id", user.id).single();
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
-
-  if (hotelId && profile) {
-    await ensureDefaultRooms({ supabase, hotelId, role: profile.role });
-    await materializeBoardForDate({ supabase, hotelId, operationDate });
-  }
 
   const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }] = await Promise.all([
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
