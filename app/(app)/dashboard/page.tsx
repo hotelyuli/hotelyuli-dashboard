@@ -4,6 +4,12 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { CsvImportPanel } from "@/features/csv-import/components/CsvImportPanel";
 import { requireSession } from "@/features/auth/logic/guards";
 import { formatInTimeZone } from "date-fns-tz";
+import { materializeBoardForDate } from "@/features/operations/services/materialize-after-import";
+import {
+  RoomBoardTable,
+  type BoardRow,
+  type RoomOption
+} from "@/features/operations/components/RoomBoardTable";
 
 export const metadata = { title: "Dashboard" };
 
@@ -15,14 +21,23 @@ export default async function DashboardPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  const [{ count: checkIns }, { count: checkOuts }, { data: operations }] = await Promise.all([
+  if (hotelId) await materializeBoardForDate({ supabase, hotelId, operationDate });
+
+  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }] = await Promise.all([
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
     supabase
       .from("daily_operations")
-      .select("operational_status, breakfast_status, breakfast_pax, outstanding_balance, currency")
+      .select(
+        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
+      )
       .eq("hotel_id", hotelId)
-      .eq("operation_date", operationDate)
+      .eq("operation_date", operationDate),
+    supabase
+      .from("rooms")
+      .select("id, display_name, sort_order, active")
+      .eq("hotel_id", hotelId)
+      .order("sort_order", { ascending: true })
   ]);
 
   const rows = operations ?? [];
@@ -33,6 +48,35 @@ export default async function DashboardPage() {
   const pending = rows.filter((row) => (row.outstanding_balance ?? 0) > 0);
   const pendingUsd = pending.filter((row) => row.currency === "USD").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const pendingCrc = pending.filter((row) => row.currency === "CRC").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
+  const opsByRoom = new Map(rows.map((row) => [row.room_id, row]));
+  const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
+  const boardRows: BoardRow[] = (rooms ?? []).map((room) => {
+    const operation = opsByRoom.get(room.id);
+    return {
+      rowId: operation?.id ?? null,
+      roomId: room.id,
+      roomLabel: room.display_name,
+      guestName: operation?.guest_name ?? null,
+      adults: operation?.adults ?? 0,
+      children: operation?.children ?? 0,
+      babies: operation?.babies ?? 0,
+      totalPax: operation?.total_pax ?? 0,
+      departureDate: operation?.departure_date ?? null,
+      operationalStatus: operation?.operational_status ?? (room.active ? "available" : "out_of_service"),
+      breakfastStatus: operation?.breakfast_status ?? "not_included",
+      breakfastPax: operation?.breakfast_pax ?? 0,
+      breakfastToGo: operation?.breakfast_to_go ?? false,
+      breakfastNotes: operation?.breakfast_notes ?? null,
+      paymentStatus: operation?.payment_status ?? null,
+      outstandingBalance: operation?.outstanding_balance ?? null,
+      currency: operation?.currency ?? null,
+      carPlate: operation?.car_plate ?? null,
+      bookingChannel: operation?.booking_channel ?? null,
+      notes: operation?.notes ?? null,
+      housekeepingCategory: operation?.housekeeping_category ?? null,
+      sameDayArrival: operation?.same_day_arrival ?? false
+    };
+  });
 
   const cards = [
     { label: t.checkIns, value: (checkIns ?? 0).toString(), note: t.importToday, icon: CalendarCheck },
@@ -49,9 +93,15 @@ export default async function DashboardPage() {
       <section className="metric-grid" aria-label="Indicadores del día">
         {cards.map(({ label, value, note, icon: Icon }) => <article className="metric-card" key={label}><div className="metric-icon"><Icon size={20} /></div><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}
       </section>
-      <section className="foundation-panel">
-        <div><p className="eyebrow">MODULE 1</p><h2>{t.foundationReady}</h2><p>{t.foundationBody}</p></div>
-        <ol><li><span>01</span>{t.connectSupabase}</li><li><span>02</span>{t.applyMigrations}</li><li><span>03</span>{t.createOwner}</li></ol>
+      <section className="dashboard-board" aria-labelledby="room-board-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">{t.operations.toUpperCase()}</p>
+            <h2 id="room-board-title">{t.operationsTitle}</h2>
+          </div>
+          <span>{boardRows.length} {locale === "es" ? "unidades" : "units"}</span>
+        </div>
+        <RoomBoardTable rows={boardRows} rooms={roomOptions} locale={locale} />
       </section>
     </main>
   );
