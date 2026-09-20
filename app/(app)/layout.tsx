@@ -18,12 +18,12 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const nav = [
     { label: t.dashboard, href: "/dashboard", enabled: true },
     { label: t.operations, href: "/operations", enabled: true },
-    { label: t.breakfast, href: "#", enabled: false },
-    { label: t.housekeeping, href: "#", enabled: false },
-    { label: t.events, href: "#", enabled: false },
-    { label: t.tasks, href: "#", enabled: false },
-    { label: t.tours, href: "#", enabled: false },
-    { label: t.income, href: "#", enabled: false }
+    { label: t.breakfast, href: "/breakfast", enabled: true },
+    { label: t.housekeeping, href: "/housekeeping", enabled: true },
+    { label: t.events, href: "/events", enabled: true },
+    { label: t.tasks, href: "/tasks", enabled: true },
+    { label: t.tours, href: "/tours", enabled: true },
+    { label: t.income, href: "/income", enabled: true }
   ];
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const { data: assignment } = await supabase.from("daily_staff_assignments").select("morning_receptionist, afternoon_receptionist, security_guard").eq("operation_date", operationDate).maybeSingle();
