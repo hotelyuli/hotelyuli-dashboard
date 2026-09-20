@@ -14,6 +14,7 @@ export function MainNav({ items }: { items: NavItem[] }) {
           key={item.label}
           className={!item.enabled ? "disabled" : pathname === item.href ? "active" : ""}
           href={item.enabled ? item.href : "#"}
+          prefetch={item.enabled}
         >
           {item.label}
         </Link>
