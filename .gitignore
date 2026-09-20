@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+/playwright-report
+/test-results
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env files (never commit secrets)
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+tsconfig.tsbuildinfo
+
+# Supabase CLI local cache/state (machine-specific, not project source)
+supabase/.temp/
+supabase/.branches/
+
+# Real guest-data CSV exports and any local test fixtures derived from them.
+# These contain real guest names and must never reach version control.
+tests/fixtures/
+check_in_report.csv
+check_out_report.csv
+*_report.csv
