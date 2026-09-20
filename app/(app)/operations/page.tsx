@@ -2,8 +2,6 @@ import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { requireSession } from "@/features/auth/logic/guards";
-import { materializeBoardForDate } from "@/features/operations/services/materialize-after-import";
-import { ensureDefaultRooms } from "@/features/operations/services/ensure-default-rooms";
 import { RoomBoardTable, type BoardRow, type RoomOption } from "@/features/operations/components/RoomBoardTable";
 
 export const metadata = { title: "Operations" };
@@ -12,28 +10,24 @@ export default async function OperationsPage() {
   const locale = ((await cookies()).get("yulios-locale")?.value ?? "es") as Locale;
   const t = dictionary(locale);
   const { supabase, user } = await requireSession();
-  const { data: profile } = await supabase.from("profiles").select("hotel_id, role").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("hotel_id").eq("id", user.id).single();
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  if (hotelId && profile) {
-    await ensureDefaultRooms({ supabase, hotelId, role: profile.role });
-    await materializeBoardForDate({ supabase, hotelId, operationDate });
-  }
-
-  const { data: rooms } = await supabase
-    .from("rooms")
-    .select("id, display_name, room_number, sort_order, active")
-    .eq("hotel_id", hotelId)
-    .order("sort_order", { ascending: true });
-
-  const { data: operations } = await supabase
-    .from("daily_operations")
-    .select(
-      "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
-    )
-    .eq("hotel_id", hotelId)
-    .eq("operation_date", operationDate);
+  const [{ data: rooms }, { data: operations }] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select("id, display_name, room_number, sort_order, active")
+      .eq("hotel_id", hotelId)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("daily_operations")
+      .select(
+        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
+      )
+      .eq("hotel_id", hotelId)
+      .eq("operation_date", operationDate)
+  ]);
 
   const opsByRoom = new Map((operations ?? []).map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
