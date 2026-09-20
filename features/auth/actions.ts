@@ -17,7 +17,12 @@ export async function login(_: LoginState, formData: FormData): Promise<LoginSta
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: "No pudimos iniciar sesión. Revise sus datos." };
+  if (error) {
+    // TEMPORARY DEBUG (revert to the generic Spanish message once diagnosed):
+    // surfaces the real Supabase error instead of collapsing every failure into one string.
+    console.error("[login debug]", error.toJSON());
+    return { error: `DEBUG name=${error.name} status=${error.status} code=${error.code} message=${error.message}` };
+  }
   redirect("/dashboard");
 }
 
