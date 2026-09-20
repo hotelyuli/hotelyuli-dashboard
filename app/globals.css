@@ -114,6 +114,11 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .foundation-panel li { background: #ffffff0d; border: 1px solid #ffffff1c; border-radius: 10px; padding: 1rem; display: flex; gap: .9rem; align-items: center; }
 .foundation-panel li span { color: var(--terracotta); font-weight: 800; }
 
+.dashboard-board { margin-top: 2.5rem; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+.section-heading h2 { margin: .35rem 0 0; font-size: clamp(1.75rem, 3vw, 2.5rem); }
+.section-heading > span { padding: .35rem .7rem; border-radius: 999px; background: var(--blush); color: var(--muted); font-size: .78rem; font-weight: 700; white-space: nowrap; }
+
 .board-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: white; margin-top: 1.5rem; }
 .board-table { width: 100%; border-collapse: collapse; font-size: .82rem; white-space: nowrap; }
 .board-table th, .board-table td { padding: .75rem .85rem; border-bottom: 1px solid var(--line); text-align: left; }
