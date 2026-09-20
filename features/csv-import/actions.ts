@@ -45,8 +45,25 @@ export async function commitCsvImport(_state: ImportState, formData: FormData): 
     })
     .select("id")
     .single();
-  if (error?.code === "23505") return { status: "success", message: "DUPLICATE" };
-  if (error || !inserted) return { status: "error", message: "SAVE_FAILED" };
+  let sourceImportId = inserted?.id;
+  let resultMessage = "SAVED";
+
+  if (error?.code === "23505") {
+    const { data: existingImport, error: existingImportError } = await supabase
+      .from("reservation_imports")
+      .select("id")
+      .eq("hotel_id", profile.hotel_id)
+      .eq("operation_date", operationDate)
+      .eq("file_type", parsed.data.fileType)
+      .eq("content_hash", contentHash)
+      .single();
+
+    if (existingImportError || !existingImport) return { status: "error", message: "SAVE_FAILED" };
+    sourceImportId = existingImport.id;
+    resultMessage = "DUPLICATE";
+  } else if (error || !sourceImportId) {
+    return { status: "error", message: "SAVE_FAILED" };
+  }
 
   const { warnings } = await materializeAfterImport({
     supabase,
@@ -55,7 +72,7 @@ export async function commitCsvImport(_state: ImportState, formData: FormData): 
     fileType: parsed.data.fileType,
     headers: parsed.data.headers,
     rows: parsed.data.rows,
-    sourceImportId: inserted.id,
+    sourceImportId,
   });
 
   revalidatePath("/dashboard");
@@ -68,7 +85,7 @@ export async function commitCsvImport(_state: ImportState, formData: FormData): 
       rowErrors: warnings.slice(0, 20).map((warning) => formatRowWarning(warning.row, warning.message)),
     };
   }
-  return { status: "success", message: "SAVED" };
+  return { status: "success", message: resultMessage };
 }
 
 function safeJson(value: FormDataEntryValue | null) {
