@@ -26,5 +26,11 @@ export async function ensureDefaultRooms(params: {
       ignoreDuplicates: true
     });
 
-  if (error) throw new Error(`ROOM_SEED_FAILED:${error.message}`);
+  if (error) {
+    console.error("ROOM_SEED_FAILED", {
+      code: error.code,
+      message: error.message,
+      hotelId
+    });
+  }
 }
