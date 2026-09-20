@@ -11,14 +11,28 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const profile = { hotel_id: "hotel-1", role: "reception", active: true };
 
-function makeSupabase(insertResult: { data: { id: string } | null; error: { code?: string } | null }) {
+function makeSupabase(
+  insertResult: { data: { id: string } | null; error: { code?: string } | null },
+  existingImportResult: { data: { id: string } | null; error: { code?: string } | null } = { data: null, error: null }
+) {
   return {
     from(table: string) {
       if (table === "profiles") {
         return { select: () => ({ eq: () => ({ single: async () => ({ data: profile, error: null }) }) }) };
       }
       if (table === "reservation_imports") {
-        return { insert: () => ({ select: () => ({ single: async () => insertResult }) }) };
+        return {
+          insert: () => ({ select: () => ({ single: async () => insertResult }) }),
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => ({ single: async () => existingImportResult })
+                })
+              })
+            })
+          })
+        };
       }
       throw new Error(`unexpected table ${table}`);
     }
@@ -46,13 +60,17 @@ describe("commitCsvImport duplicate handling", () => {
     expect(result).toEqual({ status: "success", message: "SAVED" });
   });
 
-  it("reports DUPLICATE without erroring when the unique constraint fires", async () => {
+  it("re-materializes a duplicate import instead of silently skipping it", async () => {
     vi.mocked(requireSession).mockResolvedValue({
-      supabase: makeSupabase({ data: null, error: { code: "23505" } }) as never,
+      supabase: makeSupabase(
+        { data: null, error: { code: "23505" } },
+        { data: { id: "existing-import" }, error: null }
+      ) as never,
       user: { id: "user-1" } as never
     });
     const result = await commitCsvImport(initialState, payloadFormData());
     expect(result).toEqual({ status: "success", message: "DUPLICATE" });
+    expect(materializeAfterImport).toHaveBeenCalledWith(expect.objectContaining({ sourceImportId: "existing-import" }));
   });
 
   it("surfaces per-row validation failures as Spanish messages instead of silently dropping them", async () => {
