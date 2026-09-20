@@ -142,6 +142,22 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .history-list { padding: 0 1.4rem; display: grid; gap: .6rem; max-height: 50vh; overflow: auto; }
 .history-entry { border: 1px solid var(--line); border-radius: 9px; padding: .6rem .8rem; display: flex; justify-content: space-between; align-items: center; }
 .history-entry small { color: var(--muted); }
+.empty-table-cell { padding: 2.5rem !important; text-align: center !important; color: var(--muted); }
+.housekeeping-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+.housekeeping-card { display: grid; gap: .8rem; min-height: 180px; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 8px 24px #4d333e08; }
+.housekeeping-card.is-priority { border-color: var(--terracotta); box-shadow: 0 0 0 2px #c97b7718; }
+.housekeeping-card > div { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
+.housekeeping-card h2 { margin: 0; font-size: 1.25rem; }
+.housekeeping-card small, .housekeeping-card p { margin: 0; color: var(--muted); }
+.module-pending { margin-top: 2rem; padding: 2rem; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.module-pending strong { font: 600 1.5rem var(--font-display), serif; }
+.module-pending p { color: var(--muted); }
+.page-skeleton { border-radius: 12px; background: linear-gradient(90deg, var(--blush), #fff, var(--blush)); background-size: 200% 100%; animation: skeleton-pulse 1.2s ease-in-out infinite; }
+.skeleton-title { width: min(420px, 80%); height: 64px; }
+.skeleton-subtitle { width: min(560px, 90%); height: 22px; margin-top: 1rem; }
+.skeleton-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 2.5rem; }
+.skeleton-card { height: 165px; }
+@keyframes skeleton-pulse { to { background-position: -200% 0; } }
 
 @media (max-width: 860px) {
   .login-page { grid-template-columns: 1fr; }
@@ -159,6 +175,8 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
   .dashboard-page { padding: 1.25rem; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .foundation-panel { grid-template-columns: 1fr; }
+  .housekeeping-grid { grid-template-columns: 1fr 1fr; }
+  .skeleton-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 1400px) {
   .topbar { padding: .7rem 1rem; gap: .6rem; }
@@ -170,4 +188,5 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
   .wordmark small, .staff-chip, .security-chip { display: none; }
   .page-heading { align-items: start; flex-direction: column; }
   .metric-grid { grid-template-columns: 1fr; }
+  .housekeeping-grid, .skeleton-grid { grid-template-columns: 1fr; }
 }
