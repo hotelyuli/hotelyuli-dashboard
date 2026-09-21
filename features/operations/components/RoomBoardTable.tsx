@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { History, MoveRight, Pencil, Repeat } from "lucide-react";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
@@ -126,6 +127,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
 type Dict = ReturnType<typeof dictionary>;
 
 function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: () => void }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [guestName, setGuestName] = useState(row.guestName ?? "");
@@ -158,6 +160,7 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
     startTransition(async () => {
       try {
         await updateOperationCell(data);
+        router.refresh();
         onClose();
       } catch {
         setError("SAVE_FAILED");
@@ -184,7 +187,7 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
             </select>
           </label>
           <label className="checkbox-field">
-            <input type="checkbox" checked={breakfastStatus === "included"} onChange={(e) => setBreakfastStatus(e.target.checked ? "included" : "not_included")} />
+            <input type="checkbox" checked={breakfastStatus === "included"} onChange={(e) => { const included = e.target.checked; setBreakfastStatus(included ? "included" : "not_included"); if (included && Number(breakfastPax) === 0) setBreakfastPax(String(row.totalPax || 1)); }} />
             {t.fieldBreakfastIncluded}
           </label>
           <label>{t.fieldBreakfastPax}<input type="number" min={0} value={breakfastPax} onChange={(e) => setBreakfastPax(e.target.value)} /></label>
