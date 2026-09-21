@@ -42,7 +42,7 @@ const HEADER_ALIASES = {
   pax: ["adults / children / infants", "adults/children/infants", "pax"],
   total: ["total amount", "total", "monto total"],
   balance: ["outstanding balance", "balance", "saldo"],
-  notes: ["notes", "notas"]
+  notes: ["note", "notes", "nota", "notas"]
 } as const;
 
 export function normalizeReservationRow(row: Record<string, string>, headers: string[], fileType: "check_in" | "check_out"): NormalizeResult {
