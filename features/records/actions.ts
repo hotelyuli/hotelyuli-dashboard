@@ -89,3 +89,21 @@ export async function registerIncome(formData: FormData) {
   if (queueError) throw new Error("QUEUE_FAILED");
   revalidatePath("/income"); revalidatePath("/dashboard");
 }
+
+export async function updateTask(formData: FormData) {
+  const { supabase, profile } = await authorizeWrite();
+  const parsed = z.object({
+    id: z.string().uuid(),
+    status: z.enum(["open", "in_progress", "completed", "cancelled"]),
+    assignedTo: z.string().trim().max(120)
+  }).safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) throw new Error("INVALID_INPUT");
+  const { data, error } = await supabase.from("tasks").update({
+    status: parsed.data.status,
+    assigned_to: parsed.data.assignedTo || null,
+    updated_at: new Date().toISOString()
+  }).eq("id", parsed.data.id).eq("hotel_id", profile.hotel_id).select("id").single();
+  if (error || !data) throw new Error("SAVE_FAILED");
+  revalidatePath("/tasks");
+  revalidatePath("/dashboard");
+}
