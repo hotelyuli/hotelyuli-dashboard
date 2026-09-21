@@ -24,7 +24,8 @@ const updateCellSchema = z.object({
   breakfastPax: z.coerce.number().int().min(0),
   breakfastToGo: z.enum(["true", "false"]).transform((value) => value === "true"),
   breakfastNotes: z.string().trim().max(300),
-  paymentStatus: z.string().trim().max(60),
+  paymentStatus: z.enum(["", "paid", "pending", "partial"]),
+  paymentMethod: z.string().trim().max(80),
   outstandingBalance: z.string().trim(),
   currency: z.enum(["USD", "CRC", ""])
 });
@@ -48,6 +49,7 @@ export async function updateOperationCell(formData: FormData) {
       breakfast_to_go: data.breakfastToGo,
       breakfast_notes: data.breakfastNotes || null,
       payment_status: data.paymentStatus || null,
+      payment_method: data.paymentMethod || null,
       outstanding_balance: outstandingBalance,
       currency: data.currency || null,
       manually_modified: true,
