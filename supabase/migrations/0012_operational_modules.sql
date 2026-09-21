@@ -1,3 +1,4 @@
+-- Operational records for shared hotel workflows and Google Sheets delivery.
 create table public.shift_events (
   id uuid primary key default gen_random_uuid(),
   hotel_id uuid not null references public.hotels(id) on delete restrict,
