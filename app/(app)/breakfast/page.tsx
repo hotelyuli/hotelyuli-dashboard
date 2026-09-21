@@ -20,7 +20,7 @@ export default async function BreakfastPage() {
   const rows = (operations ?? []).sort((a, b) => (roomById.get(a.room_id)?.sort_order ?? 999) - (roomById.get(b.room_id)?.sort_order ?? 999));
   const total = rows.reduce((sum, row) => sum + row.breakfast_pax, 0);
   const es = locale === "es";
-  const dateLabel = formatInTimeZone(new Date(), "America/Costa_Rica", "MMMM d, yyyy");
+  const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
   const message = ["🥐 HOTEL YULI", es ? "Desayuno" : "Breakfast", dateLabel, "", ...rows.map((row) => `${roomById.get(row.room_id)?.display_name ?? "—"} · ${row.guest_name ?? "—"} · ${row.breakfast_pax} pax${row.breakfast_to_go ? ` · ${es ? "Para llevar" : "To go"}` : ""}${row.breakfast_notes ? ` · ${row.breakfast_notes}` : ""}`), "", `${es ? "Total" : "Total covers"}: ${total} pax`].join("\n");
 
   return (
