@@ -1,4 +1,5 @@
 import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Wrench } from "lucide-react";
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { CsvImportPanel } from "@/features/csv-import/components/CsvImportPanel";
@@ -20,7 +21,7 @@ export default async function DashboardPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }] = await Promise.all([
+  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }] = await Promise.all([
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
     supabase
@@ -34,9 +35,13 @@ export default async function DashboardPage() {
       .from("rooms")
       .select("id, display_name, sort_order, active")
       .eq("hotel_id", hotelId)
-      .order("sort_order", { ascending: true })
+      .order("sort_order", { ascending: true }),
+    supabase.from("tasks").select("id, title, room_area, priority, status, assigned_to", { count: "exact" })
+      .eq("hotel_id", hotelId).in("status", ["open", "in_progress"])
+      .order("created_at", { ascending: false }).limit(5)
   ]);
 
+  if (taskError) throw new Error("TASKS_LOAD_FAILED");
   const rows = operations ?? [];
   const stayThrough = rows.filter((row) => row.operational_status === "staying").length;
   const available = rows.filter((row) => row.operational_status === "available").length;
@@ -82,7 +87,7 @@ export default async function DashboardPage() {
     { label: t.kpiStayThrough, value: stayThrough.toString(), note: t.kpiAvailable + `: ${available}`, icon: BedDouble },
     { label: t.breakfasts, value: breakfastCovers.toString(), note: t.includedCovers, icon: Coffee },
     { label: t.pendingPayments, value: pending.length.toString(), note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign },
-    { label: t.openTasks, value: "—", note: t.activeFollowups, icon: ClipboardCheck },
+    { label: t.openTasks, value: (taskCount ?? 0).toString(), note: t.activeFollowups, icon: ClipboardCheck },
     { label: t.maintenance, value: outOfService.toString(), note: t.pending, icon: Wrench }
   ];
   return (
@@ -90,6 +95,21 @@ export default async function DashboardPage() {
       <div className="page-heading"><div><p className="eyebrow">{t.morning}</p><h1>{t.greeting}</h1><p>{t.dayStarts}</p></div><CsvImportPanel locale={locale} /></div>
       <section className="metric-grid" aria-label="Indicadores del día">
         {cards.map(({ label, value, note, icon: Icon }) => <article className="metric-card" key={label}><div className="metric-icon"><Icon size={20} /></div><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}
+      </section>
+      <section className="dashboard-board" aria-labelledby="dashboard-tasks-title">
+        <div className="section-heading">
+          <h2 id="dashboard-tasks-title">{t.openTasks} · {taskCount ?? 0}</h2>
+          <Link className="secondary-button" href="/tasks">{locale === "es" ? "Ver todas las tareas" : "View all tasks"}</Link>
+        </div>
+        {tasks?.length ? <div className="board-table-wrap"><table className="board-table">
+          <thead><tr><th>{locale === "es" ? "Tarea" : "Task"}</th><th>{locale === "es" ? "Habitación / Área" : "Room / Area"}</th><th>{locale === "es" ? "Estado" : "Status"}</th><th>{locale === "es" ? "Responsable" : "Assigned to"}</th></tr></thead>
+          <tbody>{tasks.map(task => <tr key={task.id}>
+            <td className="notes-cell"><Link href="/tasks">{task.title}</Link></td>
+            <td>{task.room_area ?? "—"}</td>
+            <td>{task.status === "in_progress" ? (locale === "es" ? "En progreso" : "In progress") : (locale === "es" ? "Pendiente" : "Open")}</td>
+            <td>{task.assigned_to ?? "—"}</td>
+          </tr>)}</tbody>
+        </table></div> : <p>{locale === "es" ? "No hay tareas abiertas." : "There are no open tasks."}</p>}
       </section>
       <section className="dashboard-board" aria-labelledby="room-board-title">
         <div className="section-heading">
