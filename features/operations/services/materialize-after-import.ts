@@ -4,6 +4,8 @@ import { materializeBoard, type ReservationForBoard, type UnitForBoard } from "@
 import { planMaterialization } from "@/features/operations/logic/materialize-plan";
 import { normalizeReservationRow } from "@/features/operations/logic/reservation-normalizer";
 
+import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
+
 type Client = SupabaseClient<Database>;
 export type MaterializeWarning = { row: number; message: string };
 
@@ -68,7 +70,7 @@ async function reconcileReservationRows(params: {
           outstanding_balance: normalized.reservation.outstandingBalance,
           currency: normalized.reservation.currency,
           booking_channel: normalized.reservation.bookingChannel,
-          notes: normalized.reservation.notes,
+          ...(normalized.reservation.notes !== null ? { notes: normalized.reservation.notes } : {}),
           source_import_id: sourceImportId,
           updated_at: new Date().toISOString()
         },
@@ -88,7 +90,7 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
 
   const { data: reservations } = await supabase
     .from("reservations")
-    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency")
+    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, notes")
     .eq("hotel_id", hotelId)
     .lte("arrival_date", operationDate)
     .gte("departure_date", operationDate);
@@ -121,6 +123,7 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
   if (!plan.toWrite.length) return;
 
   const upsertRows = plan.toWrite.map((cell) => ({
+    ...breakfastFromNotes((reservations ?? []).find((r) => r.id === cell.reservationId)?.notes ?? null, cell.adults, cell.children),
     hotel_id: hotelId,
     operation_date: operationDate,
     room_id: cell.roomId,
@@ -142,5 +145,6 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
     updated_at: new Date().toISOString()
   }));
 
-  await supabase.from("daily_operations").upsert(upsertRows, { onConflict: "hotel_id,operation_date,room_id" });
+  const { error } = await supabase.from("daily_operations").upsert(upsertRows, { onConflict: "hotel_id,operation_date,room_id" });
+  if (error) throw new Error("BOARD_SAVE_FAILED");
 }
