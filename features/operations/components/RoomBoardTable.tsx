@@ -1,4 +1,5 @@
 "use client";
+import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -22,6 +23,7 @@ export type BoardRow = {
   breakfastToGo: boolean;
   breakfastNotes: string | null;
   paymentStatus: string | null;
+  paymentMethod: string | null;
   outstandingBalance: number | null;
   currency: "USD" | "CRC" | null;
   carPlate: string | null;
@@ -90,7 +92,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
                   {row.housekeepingCategory && <small className="housekeeping-note">{housekeepingLabel[row.housekeepingCategory]}</small>}
                   {row.sameDayArrival && <small className="housekeeping-note">{t.sameDaySwap}</small>}
                 </td>
-                <td>{row.paymentStatus ? (paymentStatusLabel[row.paymentStatus] ?? row.paymentStatus) : "—"}</td>
+                <td>{row.paymentStatus === "partial" ? t.paymentPartial : row.paymentStatus ? (paymentStatusLabel[row.paymentStatus] ?? row.paymentStatus) : "—"}{row.paymentMethod && <small>{row.paymentMethod}</small>}</td>
                 <td>{row.outstandingBalance != null ? `${row.currency ?? ""} ${row.outstandingBalance.toFixed(2)}` : "—"}</td>
                 <td>
                   {row.breakfastStatus === "included" ? (
@@ -134,6 +136,7 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
   const [carPlate, setCarPlate] = useState(row.carPlate ?? "");
   const [bookingChannel, setBookingChannel] = useState(row.bookingChannel ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(row.paymentMethod ?? "");
   const [paymentStatus, setPaymentStatus] = useState(row.paymentStatus ?? "");
   const [outstandingBalance, setOutstandingBalance] = useState(row.outstandingBalance != null ? String(row.outstandingBalance) : "");
   const [currency, setCurrency] = useState(row.currency ?? "");
@@ -151,6 +154,7 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
     data.set("bookingChannel", bookingChannel);
     data.set("notes", notes);
     data.set("paymentStatus", paymentStatus);
+    data.set("paymentMethod", paymentMethod);
     data.set("outstandingBalance", outstandingBalance);
     data.set("currency", currency);
     data.set("breakfastStatus", breakfastStatus);
@@ -177,7 +181,8 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
           <label>{t.fieldGuest}<input value={guestName} onChange={(e) => setGuestName(e.target.value)} maxLength={120} /></label>
           <label>{t.fieldPlate}<input value={carPlate} onChange={(e) => setCarPlate(e.target.value)} maxLength={20} /></label>
           <label>{t.fieldChannel}<input value={bookingChannel} onChange={(e) => setBookingChannel(e.target.value)} maxLength={60} /></label>
-          <label>{t.fieldPaymentStatus}<input value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} maxLength={60} /></label>
+          <label>{t.fieldPaymentMethod}<select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}><PaymentMethodOptions /></select></label>
+          <label>{t.fieldPaymentStatus}<select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}><option value="">—</option><option value="paid">{t.paymentPaid}</option><option value="pending">{t.paymentPending}</option><option value="partial">{t.paymentPartial}</option></select></label>
           <label>{t.fieldBalance}<input type="number" step="0.01" value={outstandingBalance} onChange={(e) => setOutstandingBalance(e.target.value)} /></label>
           <label>{t.fieldCurrency}
             <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "CRC" | "")}>

@@ -1,4 +1,5 @@
 "use client";
+import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -42,15 +43,14 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
       <label>{es ? "Fecha del tour" : "Tour date"}<input name="tourDate" type="date" defaultValue={today} required /></label><label>Adults<input name="adults" type="number" min="0" defaultValue="2" required /></label>
       <label>Children<input name="children" type="number" min="0" defaultValue="0" required /></label><label>{es ? "Precio total" : "Total price"}<input name="totalPrice" type="number" min="0" step="0.01" defaultValue="0" required /></label>
       <label>Currency<select name="currency" defaultValue="USD"><option>USD</option><option>CRC</option></select></label><label>{es ? "Comisión" : "Commission"}<input name="commissionAmount" type="number" min="0" step="0.01" defaultValue="0" required /></label>
-      <label>Status<select name="status" defaultValue="paid"><option value="paid">PAID</option><option value="pending">PENDING</option><option value="cancelled">CANCELLED</option></select></label><label>{es ? "Método de pago" : "Payment method"}<select name="paymentMethod" defaultValue="Visa"><option>Visa</option><option>Mastercard</option><option>Cash</option><option>Transfer</option><option>SINPE</option></select></label>
-      <label>{es ? "Comprobante #" : "Receipt #"}<input name="receiptNumber" /></label><label>{es ? "Reservado por" : "Booked by"}<input name="bookedBy" defaultValue={defaultBookedBy} required /></label>
+      <input type="hidden" name="status" value="pending" /><label>{es ? "Reservado por" : "Booked by"}<input name="bookedBy" defaultValue={defaultBookedBy} required /></label>
       <label className="full-width">Notes<input name="notes" /></label>
     </>}
     {kind === "income" && <>
       <label>{es ? "Habitación" : "Room"}<input name="roomNumber" /></label><label>{es ? "Huésped" : "Guest"}<input name="guestName" required /></label>
       <label>{es ? "¿Pagó el cliente?" : "Did the customer pay?"}<select name="paid" defaultValue="true"><option value="true">{es ? "Sí, pagado" : "Yes, paid"}</option><option value="false">{es ? "No, pendiente" : "No, pending"}</option></select></label><label>{es ? "Categoría" : "Category"}<select name="category" defaultValue="Accommodation"><option>Accommodation</option><option>Tour</option><option>Restaurant</option><option>Transport</option><option>Other</option></select></label>
       <label>{es ? "Monto" : "Amount"}<input name="amount" type="number" min="0" step="0.01" required /></label><label>Currency<select name="currency" defaultValue="USD"><option>USD</option><option>CRC</option></select></label>
-      <label className="full-width">{es ? "Método de pago" : "Payment method"}<select name="paymentMethod" defaultValue="Visa"><option>Visa</option><option>Mastercard</option><option>Cash</option><option>Transfer</option><option>SINPE</option><option>Booking.com</option><option>Expedia</option></select></label>
+      <label className="full-width">{es ? "Método de pago" : "Payment method"}<select name="paymentMethod" defaultValue="Visa"><PaymentMethodOptions /></select></label>
       <label className="full-width">{es ? "Referencia / Nota" : "Reference / Note"}<input name="referenceNote" /></label>
     </>}
   </div><footer><button type="button" className="secondary-button" onClick={onClose}>{es ? "Cancelar" : "Cancel"}</button><button className="primary-button" disabled={pending}>{pending ? "…" : label}</button></footer></form></section></div>;

@@ -23,7 +23,7 @@ export default async function OperationsPage() {
     supabase
       .from("daily_operations")
       .select(
-        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
+        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
       )
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate)
@@ -50,6 +50,7 @@ export default async function OperationsPage() {
       breakfastToGo: op?.breakfast_to_go ?? false,
       breakfastNotes: op?.breakfast_notes ?? null,
       paymentStatus: op?.payment_status ?? null,
+      paymentMethod: op?.payment_method ?? null,
       outstandingBalance: op?.outstanding_balance ?? null,
       currency: op?.currency ?? null,
       carPlate: op?.car_plate ?? null,
