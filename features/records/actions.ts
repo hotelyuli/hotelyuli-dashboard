@@ -53,8 +53,8 @@ const tourSchema = z.object({
   operatorName: z.string().trim().min(1).max(120), tourName: z.string().trim().min(1).max(120),
   tourDate: z.string().date(), adults: z.coerce.number().int().min(0), children: z.coerce.number().int().min(0),
   totalPrice: z.coerce.number().min(0), currency: z.enum(["USD", "CRC"]), commissionAmount: z.coerce.number().min(0),
-  status: z.enum(["paid", "pending", "cancelled"]), paymentMethod: z.string().trim().max(80),
-  receiptNumber: z.string().trim().max(80), bookedBy: z.string().trim().min(1).max(120), notes: z.string().trim().max(1000)
+  status: z.enum(["paid", "pending", "cancelled"]), paymentMethod: z.string().trim().max(80).default(""),
+  receiptNumber: z.string().trim().max(80).default(""), bookedBy: z.string().trim().min(1).max(120), notes: z.string().trim().max(1000)
 });
 
 export async function registerTour(formData: FormData) {
