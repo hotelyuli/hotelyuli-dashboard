@@ -18,7 +18,7 @@ export default async function HousekeepingPage() {
   ]);
   const opByRoom = new Map((operations ?? []).map((row) => [row.room_id, row]));
   const es = locale === "es";
-  const category = { priority: es ? "Prioridad" : "Priority", vacant_after_departure: es ? "Libre después de salida" : "Vacant after departure", remains_occupied: es ? "Permanece ocupado" : "Remains occupied" } as const;
+  const category = { priority: es ? "Prioridad" : "Priority", vacant_after_departure: es ? "Quedan vacías" : "Vacant after departure", remains_occupied: es ? "Permanecen ocupadas" : "Remains occupied" } as const;
   const groups = { priority: [] as string[], vacant_after_departure: [] as string[], remains_occupied: [] as string[] };
   for (const room of rooms ?? []) {
     const op = opByRoom.get(room.id);
@@ -26,8 +26,8 @@ export default async function HousekeepingPage() {
     const key = op.same_day_arrival ? "priority" : op.housekeeping_category;
     if (key && key in groups) groups[key as keyof typeof groups].push(room.display_name);
   }
-  const dateLabel = formatInTimeZone(new Date(), "America/Costa_Rica", "MMMM d, yyyy");
-  const message = ["🧹 HOTEL YULI", "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
+  const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
+  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
 
   return (
     <main className="dashboard-page">
