@@ -36,7 +36,7 @@ export async function updateOperationCell(formData: FormData) {
   const data = parsed.data;
   const outstandingBalance = data.outstandingBalance === "" ? null : Number.parseFloat(data.outstandingBalance);
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("daily_operations")
     .update({
       guest_name: data.guestName || null,
@@ -54,11 +54,15 @@ export async function updateOperationCell(formData: FormData) {
       updated_at: new Date().toISOString()
     })
     .eq("id", data.rowId)
-    .eq("hotel_id", hotelId);
-  if (error) throw new Error("SAVE_FAILED");
+    .eq("hotel_id", hotelId)
+    .select("id")
+    .single();
+  if (error || !updated) throw new Error("SAVE_FAILED");
 
   revalidatePath("/operations");
   revalidatePath("/dashboard");
+  revalidatePath("/breakfast");
+  revalidatePath("/housekeeping");
 }
 
 const moveGuestSchema = z.object({ rowId: z.string().uuid(), targetRoomId: z.string().uuid() });
