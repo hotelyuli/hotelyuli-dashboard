@@ -1,3 +1,4 @@
+import { HotelClock } from "@/components/HotelClock";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { logout } from "@/features/auth/actions";
@@ -23,7 +24,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     { label: t.events, href: "/events", enabled: true },
     { label: t.tasks, href: "/tasks", enabled: true },
     { label: t.tours, href: "/tours", enabled: true },
-    { label: t.income, href: "/income", enabled: true }
+    { label: t.income, href: "/income", enabled: true },
+    { label: locale === "es" ? "Reportes" : "Reports", href: "/reports", enabled: true }
   ];
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const { data: assignment } = await supabase.from("daily_staff_assignments").select("morning_receptionist, afternoon_receptionist, security_guard").eq("operation_date", operationDate).maybeSingle();
@@ -32,7 +34,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     <div className="app-shell">
       <header className="topbar">
         <Link href="/dashboard" className="wordmark"><span>Y</span><div><strong>Hotel Yuli</strong><small>YULIOS · OPERATIONS</small></div></Link>
-        <LanguageSwitcher locale={locale} />
+        <HotelClock locale={locale} /><LanguageSwitcher locale={locale} />
         <TeamHeader locale={locale} shift={shift} assignment={todaysAssignment} />
         <form action={logout}><button className="icon-button" aria-label="Cerrar sesión"><LogOut size={18} /></button></form>
       </header>

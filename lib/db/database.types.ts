@@ -106,6 +106,12 @@ export type Database = {
         Update: { room_number?: string | null; guest_name?: string; paid?: boolean; category?: string; amount?: number; currency?: "USD" | "CRC"; payment_method?: string; reference_note?: string | null; updated_at?: string };
         Relationships: [];
       };
+      shift_reports: {
+        Row: { id: string; hotel_id: string; operation_date: string; shift: "morning" | "afternoon" | "night"; receptionist: string; final_report_en: string; inputs: Json; source_snapshot: Json; status: "draft" | "closed"; revision: number; created_by: string; updated_by: string; closed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; shift: "morning" | "afternoon" | "night"; receptionist: string; final_report_en: string; inputs: Json; source_snapshot: Json; status: "draft" | "closed"; revision: number; created_by: string; updated_by: string; closed_at?: string | null; updated_at?: string };
+        Update: { hotel_id?: string; operation_date?: string; shift?: "morning" | "afternoon" | "night"; receptionist?: string; final_report_en?: string; inputs?: Json; source_snapshot?: Json; status?: "draft" | "closed"; revision?: number; updated_by?: string; closed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
       google_sheets_outbox: {
         Row: { id: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status: "pending" | "sent" | "failed"; attempt_count: number; last_error: string | null; sent_at: string | null; created_at: string };
         Insert: { id?: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status?: "pending" | "sent" | "failed"; attempt_count?: number; last_error?: string | null; sent_at?: string | null; created_at?: string };
