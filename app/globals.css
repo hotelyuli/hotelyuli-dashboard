@@ -149,6 +149,14 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .housekeeping-card > div { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
 .housekeeping-card h2 { margin: 0; font-size: 1.25rem; }
 .housekeeping-card small, .housekeeping-card p { margin: 0; color: var(--muted); }
+.message-actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
+.message-summary { margin-top: 1.5rem; border: 1px solid var(--line); border-radius: 14px; background: white; overflow: hidden; }
+.message-summary h2 { margin: 0; padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); font-size: 1.25rem; }
+.message-summary pre { margin: 1rem; padding: 1.2rem; border: 1px solid var(--line); border-radius: 11px; background: var(--cream); white-space: pre-wrap; font: inherit; line-height: 1.55; }
+.record-modal { width: min(680px, 100%); }
+.record-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.record-summary-card { padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.record-summary-card strong { display: block; margin-top: .35rem; font: 600 2rem var(--font-display), serif; }
 .module-pending { margin-top: 2rem; padding: 2rem; border: 1px solid var(--line); border-radius: 14px; background: white; }
 .module-pending strong { font: 600 1.5rem var(--font-display), serif; }
 .module-pending p { color: var(--muted); }
@@ -171,6 +179,8 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
   .team-fields { grid-template-columns: 1fr; }
   .csv-actions { width: 100%; justify-content: stretch; }
   .csv-actions button { flex: 1; }
+  .message-actions { width: 100%; justify-content: stretch; }
+  .message-actions button { flex: 1; }
   .main-nav { padding: 0 1rem; }
   .dashboard-page { padding: 1.25rem; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
