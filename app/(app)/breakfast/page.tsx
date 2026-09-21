@@ -1,3 +1,5 @@
+import { SaveReportButton } from "@/features/reports/components/SaveReportButton";
+import { ReportHistory } from "@/features/reports/components/ReportHistory";
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
@@ -32,6 +34,8 @@ export default async function BreakfastPage() {
         </table>
       </div>
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>
+      <SaveReportButton kind="breakfast" date={operationDate} locale={locale} text={message} />
+      <ReportHistory kind="breakfast" locale={locale} />
     </main>
   );
 }

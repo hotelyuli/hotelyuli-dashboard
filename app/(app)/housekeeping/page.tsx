@@ -1,3 +1,5 @@
+import { SaveReportButton } from "@/features/reports/components/SaveReportButton";
+import { ReportHistory } from "@/features/reports/components/ReportHistory";
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
@@ -34,6 +36,8 @@ export default async function HousekeepingPage() {
       <div className="page-heading"><div><p className="eyebrow">HOUSEKEEPING</p><h1>{es ? "Estado de habitaciones en vivo" : "Live room status"}</h1><p>{es ? "Vista operativa de las 25 unidades para hoy." : "Today’s operational view of all 25 units."}</p></div><MessageActions text={message} locale={locale} /></div>
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>
       <section className="housekeeping-grid">{(rooms ?? []).map((room) => { const op = opByRoom.get(room.id); return <article className={`housekeeping-card ${op?.same_day_arrival ? "is-priority" : ""}`} key={room.id}><div><h2>{room.display_name}</h2><span className={`status-badge status-${op?.operational_status ?? "available"}`}>{op?.operational_status === "check_in" ? "Check-in" : op?.operational_status === "staying" ? (es ? "Ocupada" : "Occupied") : (es ? "Disponible" : "Available")}</span></div><strong>{op?.housekeeping_category ? category[op.housekeeping_category] : (es ? "Sin instrucción especial" : "No special instruction")}</strong>{op?.same_day_arrival && <p>{es ? "Salida y llegada el mismo día" : "Same-day departure and arrival"}</p>}{op?.notes && <p>{op.notes}</p>}</article>; })}</section>
+      <SaveReportButton kind="housekeeping" date={operationDate} locale={locale} text={message} />
+      <ReportHistory kind="housekeeping" locale={locale} />
     </main>
   );
 }

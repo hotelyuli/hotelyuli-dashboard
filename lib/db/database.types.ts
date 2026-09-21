@@ -5,6 +5,12 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
+      report_snapshots: {
+        Row: { id:string; hotel_id:string; operation_date:string; report_kind:"breakfast"|"housekeeping"; locale:"en"|"es"; report_text:string; content_hash:string; created_by:string; created_at:string };
+        Insert: { id?:string; hotel_id:string; operation_date:string; report_kind:"breakfast"|"housekeeping"; locale:"en"|"es"; report_text:string; content_hash:string; created_by:string; created_at?:string };
+        Update: never;
+        Relationships: [];
+      };
       hotels: {
         Row: { id: string; name: string; slug: string; timezone: string; active: boolean; created_at: string };
         Insert: { id?: string; name: string; slug: string; timezone?: string; active?: boolean; created_at?: string };
