@@ -82,6 +82,36 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      shift_events: {
+        Row: { id: string; hotel_id: string; operation_date: string; event_time: string; category: string; room_area: string | null; description: string; action_taken: string | null; status: string; priority: string; requires_follow_up: boolean; created_by: string; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; event_time: string; category: string; room_area?: string | null; description: string; action_taken?: string | null; status: string; priority: string; requires_follow_up?: boolean; created_by: string; created_at?: string; updated_at?: string };
+        Update: { event_time?: string; category?: string; room_area?: string | null; description?: string; action_taken?: string | null; status?: string; priority?: string; requires_follow_up?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      tasks: {
+        Row: { id: string; hotel_id: string; operation_date: string; source_event_id: string | null; title: string; room_area: string | null; priority: string; status: string; assigned_to: string | null; due_at: string | null; created_by: string; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; source_event_id?: string | null; title: string; room_area?: string | null; priority: string; status?: string; assigned_to?: string | null; due_at?: string | null; created_by: string; created_at?: string; updated_at?: string };
+        Update: { title?: string; room_area?: string | null; priority?: string; status?: string; assigned_to?: string | null; due_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      tour_bookings: {
+        Row: { id: string; hotel_id: string; operation_date: string; guest_name: string; room_number: string | null; operator_name: string; tour_name: string; tour_date: string; adults: number; children: number; total_price: number; currency: "USD" | "CRC"; commission_amount: number; status: string; payment_method: string | null; receipt_number: string | null; booked_by: string; notes: string | null; created_by: string; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; guest_name: string; room_number?: string | null; operator_name: string; tour_name: string; tour_date: string; adults?: number; children?: number; total_price: number; currency: "USD" | "CRC"; commission_amount?: number; status: string; payment_method?: string | null; receipt_number?: string | null; booked_by: string; notes?: string | null; created_by: string; created_at?: string; updated_at?: string };
+        Update: { guest_name?: string; room_number?: string | null; operator_name?: string; tour_name?: string; tour_date?: string; adults?: number; children?: number; total_price?: number; currency?: "USD" | "CRC"; commission_amount?: number; status?: string; payment_method?: string | null; receipt_number?: string | null; booked_by?: string; notes?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      income_entries: {
+        Row: { id: string; hotel_id: string; operation_date: string; room_number: string | null; guest_name: string; paid: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note: string | null; created_by: string; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; room_number?: string | null; guest_name: string; paid?: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note?: string | null; created_by: string; created_at?: string; updated_at?: string };
+        Update: { room_number?: string | null; guest_name?: string; paid?: boolean; category?: string; amount?: number; currency?: "USD" | "CRC"; payment_method?: string; reference_note?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      google_sheets_outbox: {
+        Row: { id: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status: "pending" | "sent" | "failed"; attempt_count: number; last_error: string | null; sent_at: string | null; created_at: string };
+        Insert: { id?: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status?: "pending" | "sent" | "failed"; attempt_count?: number; last_error?: string | null; sent_at?: string | null; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
