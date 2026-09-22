@@ -17,7 +17,6 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const shift = cookieStore.get("yulios-shift")?.value === "afternoon" ? "afternoon" : "morning";
   const t = dictionary(locale);
   const nav = [
-    { label: locale === "es" ? "Proveedores" : "Contacts", href: "/contacts", enabled: true },
     { label: t.dashboard, href: "/dashboard", enabled: true },
     { label: t.operations, href: "/operations", enabled: true },
     { label: t.breakfast, href: "/breakfast", enabled: true },
@@ -26,7 +25,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     { label: t.tasks, href: "/tasks", enabled: true },
     { label: t.tours, href: "/tours", enabled: true },
     { label: t.income, href: "/income", enabled: true },
-    { label: locale === "es" ? "Reportes" : "Reports", href: "/reports", enabled: true }
+    { label: locale === "es" ? "Reportes" : "Reports", href: "/reports", enabled: true },
+    { label: locale === "es" ? "Proveedores" : "Contacts", href: "/contacts", enabled: true }
   ];
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const { data: assignment } = await supabase.from("daily_staff_assignments").select("morning_receptionist, afternoon_receptionist, security_guard").eq("operation_date", operationDate).maybeSingle();

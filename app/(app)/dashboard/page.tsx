@@ -1,4 +1,4 @@
-import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Waves, BrushCleaning, LockKeyhole } from "lucide-react";
+import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Waves } from "lucide-react";
 import { RegisterButton } from "@/features/records/components/RegisterForms";
 import Link from "next/link";
 import { cookies } from "next/headers";
@@ -18,9 +18,8 @@ export default async function DashboardPage() {
   const locale = ((await cookies()).get("yulios-locale")?.value ?? "es") as Locale;
   const t = dictionary(locale);
   const es = locale === "es";
-  const shift = (await cookies()).get("yulios-shift")?.value === "afternoon" ? "afternoon" : "morning";
   const { supabase, user } = await requireSession();
-  const { data: profile } = await supabase.from("profiles").select("hotel_id, full_name").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("hotel_id").eq("id", user.id).single();
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
@@ -102,14 +101,6 @@ export default async function DashboardPage() {
   return (
     <main className="reception-dashboard">
       <section className="reception-imports"><div className="section-caption"><h2>{es ? "Importación de datos" : "Data import"}</h2><span>LITTLE HOTELIER · CSV</span></div><CsvImportPanel locale={locale} variant="cards" /></section>
-      <div className="reception-toolbar"><div className="section-caption"><h2>{es ? "Acciones de turno" : "Shift actions"}</h2><span>{es ? "ACCESOS RÁPIDOS" : "QUICK ACTIONS"}</span></div>
-        <RegisterButton kind="event" locale={locale} />
-        <Link className="secondary-button" href="/breakfast"><Coffee size={17} aria-hidden="true" />{es ? "Reporte de desayuno" : "Breakfast report"}</Link>
-        <Link className="secondary-button" href="/housekeeping"><BrushCleaning size={17} aria-hidden="true" />{es ? "Lista de limpieza" : "Housekeeping list"}</Link>
-        <RegisterButton kind="tour" locale={locale} defaultBookedBy={profile?.full_name ?? ""} />
-        <RegisterButton kind="income" locale={locale} />
-        <Link className="primary-button close-shift-link" href={`/reports?shift=${shift}`}><LockKeyhole size={17} aria-hidden="true" />{es ? "Cerrar turno" : "Close shift"}</Link>
-      </div>
       <div className="reception-columns">
         <div className="reception-main">
           <section className="reception-kpis" aria-label={es ? "Indicadores del día" : "Today's overview"}>
