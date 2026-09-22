@@ -13,7 +13,7 @@ type Assignment = {
   security_guard: string;
 };
 
-const receptionists = ["Grettel", "Rene", "Rebeca"];
+import { RECEPTIONISTS as receptionists } from "@/features/staff/receptionists";
 const guards = ["Yei Hernandez", "Rolando Fonseca", "Andrés", "Oscar"];
 
 export function TeamHeader({ locale, shift, assignment }: { locale: Locale; shift: Shift; assignment: Assignment }) {

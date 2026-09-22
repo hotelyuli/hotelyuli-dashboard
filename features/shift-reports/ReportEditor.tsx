@@ -50,7 +50,7 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
     ["takeawayReady","Desayunos para llevar preparados","Takeaway breakfasts prepared"]
   ];
   const checks: [keyof Pick<ReportInput,"eventsReviewed"|"tasksReviewed"|"breakfastReviewed"|"incomeReviewed"|"cashReviewed"|"handover">,string,string][] = [
-    ["eventsReviewed","Revisé los eventos y el reporte","I reviewed the events and report"],
+    ["eventsReviewed","Revisé los incidentes y el reporte","I reviewed the incidents and report"],
     ["tasksReviewed","Revisé los pendientes y responsables","I reviewed open tasks and responsibilities"],
     ...(input.shift === "morning" ? [] : [
       ["breakfastReviewed","Revisé el desayuno","I reviewed breakfast"],
@@ -65,10 +65,10 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
     {closed && <p className="success-message">{es ? "Turno cerrado. Reporte final de solo lectura." : "Shift closed. Final report is read-only."}</p>}
     <fieldset disabled={closed || pending}><legend>{es ? "Información de la recepción" : "Reception notes"}</legend>
       <label>{es ? "Recepcionista" : "Receptionist"}<input value={input.receptionist} maxLength={120} onChange={e=>update({receptionist:e.target.value})} /></label>
-      <h3>{es ? "Seleccione los eventos de este turno" : "Select this shift's events"}</h3>
-      <p>{es ? "Se muestran los eventos del día; incluya solo los de esta entrega." : "These are the day's events; include only those relevant to this handover."}</p>
+      <h3>{es ? "Seleccione los incidentes de este turno" : "Select this shift's incidents"}</h3>
+      <p>{es ? "Se muestran los incidentes del día; incluya solo los de esta entrega." : "These are the day's incidents; include only those relevant to this handover."}</p>
       {events.map(event => <label className="report-check" key={event.id}><input type="checkbox" checked={input.eventIds.includes(event.id)} onChange={e=>update({eventIds:e.target.checked ? [...input.eventIds,event.id] : input.eventIds.filter(id=>id!==event.id)})} /><span><strong>{event.event_time.slice(0,5)} · {event.room_area ?? "—"}</strong><br />{event.description}</span></label>)}
-      {!events.length && <p>{es ? "No hay eventos registrados para esta fecha." : "No events recorded for this date."}</p>}
+      {!events.length && <p>{es ? "No hay eventos registrados para esta fecha." : "No incidents recorded for this date."}</p>}
       <label>{es ? "Notas adicionales y entrega" : "Additional notes and handover"}<textarea rows={5} maxLength={6000} value={input.notes} onChange={e=>update({notes:e.target.value})} /></label>
       <p>{es ? "Marque solo las acciones que se realizaron." : "Check only actions that were actually completed."}</p>
       {confirmations.map(([key,spanish,english])=><label className="report-check" key={key}><input type="checkbox" checked={input[key]} onChange={e=>update({[key]:e.target.checked})} />{es ? spanish : english}</label>)}

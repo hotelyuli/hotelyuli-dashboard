@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const shift = cookieStore.get("yulios-shift")?.value === "afternoon" ? "afternoon" : "morning";
   const t = dictionary(locale);
   const nav = [
+    { label: locale === "es" ? "Proveedores" : "Contacts", href: "/contacts", enabled: true },
     { label: t.dashboard, href: "/dashboard", enabled: true },
     { label: t.operations, href: "/operations", enabled: true },
     { label: t.breakfast, href: "/breakfast", enabled: true },

@@ -1,5 +1,6 @@
 "use client";
 
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useState } from "react";
 import type { Locale } from "@/lib/i18n";
 
@@ -40,7 +41,7 @@ export function MessageActions({ text, locale }: { text: string; locale: Locale 
   return (
     <div className="message-actions">
       <button className="secondary-button" type="button" onClick={copy}>{copied ? (es ? "Copiado" : "Copied") : (es ? "Copiar" : "Copy")}</button>
-      <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+      <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon />WhatsApp</a>
       <button className="secondary-button" type="button" onClick={printReport}>{es ? "Imprimir" : "Print"}</button>
       {error && <p role="alert">{error}</p>}
     </div>
