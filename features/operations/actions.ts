@@ -6,6 +6,7 @@ import { requireSession } from "@/features/auth/logic/guards";
 import { can } from "@/features/auth/logic/permissions";
 import type { AppRole } from "@/features/auth/logic/permissions";
 import { materializeUnit, type ReservationForBoard } from "@/features/operations/logic/board";
+import { BED_SETUPS, HOUSEKEEPERS, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 
 async function authorizeOperationsWrite() {
   const { supabase, user } = await requireSession();
@@ -27,7 +28,10 @@ const updateCellSchema = z.object({
   paymentStatus: z.enum(["", "paid", "pending", "partial"]),
   paymentMethod: z.string().trim().max(80),
   outstandingBalance: z.string().trim(),
-  currency: z.enum(["USD", "CRC", ""])
+  currency: z.enum(["USD", "CRC", ""]),
+  housekeeper: z.enum(["", ...HOUSEKEEPERS]),
+  bedSetup: z.enum(["", ...BED_SETUPS]),
+  breakfastToGoTime: z.string().regex(/^(\d{2}:\d{2})?$/)
 });
 
 export async function updateOperationCell(formData: FormData) {
@@ -36,6 +40,14 @@ export async function updateOperationCell(formData: FormData) {
   if (!parsed.success) throw new Error("INVALID_INPUT");
   const data = parsed.data;
   const outstandingBalance = data.outstandingBalance === "" ? null : Number.parseFloat(data.outstandingBalance);
+
+  // Bed setup only applies to the convertible rooms; anything else is stored as null.
+  let bedSetup: BedSetup | null = null;
+  if (data.bedSetup) {
+    const { data: cell } = await supabase.from("daily_operations").select("room_id").eq("id", data.rowId).eq("hotel_id", hotelId).single();
+    const { data: room } = cell ? await supabase.from("rooms").select("unit_code").eq("id", cell.room_id).eq("hotel_id", hotelId).single() : { data: null };
+    if (supportsBedSetup(room?.unit_code)) bedSetup = data.bedSetup;
+  }
 
   const { data: updated, error } = await supabase
     .from("daily_operations")
@@ -52,6 +64,9 @@ export async function updateOperationCell(formData: FormData) {
       payment_method: data.paymentMethod || null,
       outstanding_balance: outstandingBalance,
       currency: data.currency || null,
+      housekeeper: data.housekeeper || null,
+      bed_setup: bedSetup,
+      breakfast_to_go_time: data.breakfastToGo && data.breakfastToGoTime ? data.breakfastToGoTime : null,
       manually_modified: true,
       updated_at: new Date().toISOString()
     })
@@ -146,7 +161,7 @@ async function recomputeRooms(params: {
 
   const { data: reservations } = await supabase
     .from("reservations")
-    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency")
+    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, booking_channel")
     .eq("hotel_id", hotelId)
     .in("room_id", roomIds)
     .lte("arrival_date", operationDate)
@@ -191,6 +206,7 @@ async function recomputeRooms(params: {
         payment_status: cell.paymentStatus,
         outstanding_balance: cell.outstandingBalance,
         currency: cell.currency,
+        booking_channel: reservations?.find((reservation) => reservation.id === cell.reservationId)?.booking_channel ?? null,
         manually_modified: true,
         updated_at: new Date().toISOString()
       },

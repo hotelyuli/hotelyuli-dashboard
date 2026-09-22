@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeReservationRow } from "@/features/operations/logic/reservation-normalizer";
+import { inferBookingChannel, normalizeReservationRow } from "@/features/operations/logic/reservation-normalizer";
 import { parseCsv } from "@/features/csv-import/logic/parser";
 
 describe("normalizeReservationRow", () => {
@@ -34,7 +34,7 @@ describe("normalizeReservationRow", () => {
     expect(result.reservation.children).toBe(1);
     expect(result.reservation.babies).toBe(0);
     expect(result.reservation.currency).toBe("USD");
-    expect(result.reservation.bookingChannel).toBeNull();
+    expect(result.reservation.bookingChannel).toBe("Directo");
     expect(result.reservation.outstandingBalance).toBe(0);
     expect(result.reservation.totalAmount).toBe(96.11);
   });
@@ -107,5 +107,23 @@ describe("normalizeReservationRow", () => {
     expect(result.reservation.adults).toBe(0);
     expect(result.reservation.children).toBe(0);
     expect(result.reservation.babies).toBe(0);
+  });
+});
+
+describe("inferBookingChannel", () => {
+  it.each([
+    ["LH26091959154638", "Directo"],
+    ["BDC-5134582030", "Booking.com"],
+    ["EXP-2531358436", "Expedia"],
+    ["SMP-2026090151577902", "Simple Booking"],
+    ["HWL-12345", "Hostelworld"],
+    ["bdc-5134582030", "Booking.com"],
+    ["  lh123", "Directo"]
+  ])("maps %s to %s", (reference, channel) => {
+    expect(inferBookingChannel(reference)).toBe(channel);
+  });
+
+  it.each([["XYZ-1"], ["LHX123"], ["12345"], [""], [null], [undefined]])("returns null for unknown or missing prefix %s", (reference) => {
+    expect(inferBookingChannel(reference)).toBeNull();
   });
 });

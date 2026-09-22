@@ -29,7 +29,7 @@ describe.skipIf(!hasFixtures)("real Little Hotelier export fixtures", () => {
     expect(results.every((r) => r.ok && /^\d{4}-\d{2}-\d{2}$/.test(r.reservation.departureDate))).toBe(true);
     expect(results.every((r) => r.ok && r.reservation.departureDate > r.reservation.arrivalDate)).toBe(true);
     expect(results.every((r) => r.ok && r.reservation.currency === "USD")).toBe(true);
-    expect(results.every((r) => r.ok && r.reservation.bookingChannel === null)).toBe(true);
+    expect(results.every((r) => r.ok && ["Directo", "Booking.com", "Expedia", "Simple Booking", "Hostelworld"].includes(r.reservation.bookingChannel ?? ""))).toBe(true);
   });
 
   it("normalizes every row of the real check-out report against the locked contract", () => {

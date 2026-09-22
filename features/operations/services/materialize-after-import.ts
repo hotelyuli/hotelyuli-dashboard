@@ -90,7 +90,7 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
 
   const { data: reservations } = await supabase
     .from("reservations")
-    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, notes")
+    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, notes, booking_channel")
     .eq("hotel_id", hotelId)
     .lte("arrival_date", operationDate)
     .gte("departure_date", operationDate);
@@ -122,8 +122,10 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
   );
   if (!plan.toWrite.length) return;
 
+  const reservationById = new Map((reservations ?? []).map((reservation) => [reservation.id, reservation]));
   const upsertRows = plan.toWrite.map((cell) => ({
-    ...breakfastFromNotes((reservations ?? []).find((r) => r.id === cell.reservationId)?.notes ?? null, cell.adults, cell.children),
+    ...breakfastFromNotes(reservationById.get(cell.reservationId ?? "")?.notes ?? null, cell.adults, cell.children),
+    booking_channel: reservationById.get(cell.reservationId ?? "")?.booking_channel ?? null,
     hotel_id: hotelId,
     operation_date: operationDate,
     room_id: cell.roomId,

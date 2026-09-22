@@ -6,12 +6,29 @@ import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can, type AppRole } from "@/features/auth/logic/permissions";
+import { resolveRoomTokens } from "@/features/operations/logic/room-resolver";
 
 async function authorizeWrite() {
   const { supabase, user } = await requireSession();
   const { data: profile } = await supabase.from("profiles").select("hotel_id, role, active, full_name").eq("id", user.id).single();
   if (!profile?.active || !can(profile.role as AppRole, "operations:write")) throw new Error("NOT_AUTHORIZED");
   return { supabase, user, profile, operationDate: formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd") };
+}
+
+/** Guest currently on today's board for a typed room ("5", "Hab 5", "B3", "20"…); null if none. */
+export async function findGuestForRoom(roomNumber: string): Promise<string | null> {
+  const { supabase, profile, operationDate } = await authorizeWrite();
+  const unitCodes = resolveRoomTokens(z.string().trim().max(20).parse(roomNumber)).unitCodes;
+  if (!unitCodes.length) return null;
+  const { data: rooms } = await supabase.from("rooms").select("id, sort_order").eq("hotel_id", profile.hotel_id).in("unit_code", unitCodes).order("sort_order");
+  if (!rooms?.length) return null;
+  const { data: cells } = await supabase.from("daily_operations").select("room_id, guest_name").eq("hotel_id", profile.hotel_id).eq("operation_date", operationDate).in("room_id", rooms.map((room) => room.id)).not("guest_name", "is", null);
+  const guestByRoom = new Map((cells ?? []).map((cell) => [cell.room_id, cell.guest_name]));
+  for (const room of rooms) {
+    const guest = guestByRoom.get(room.id);
+    if (guest) return guest;
+  }
+  return null;
 }
 
 const eventSchema = z.object({

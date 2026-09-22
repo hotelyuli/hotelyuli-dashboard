@@ -14,9 +14,28 @@ export type NormalizedReservation = {
   outstandingBalance: number | null;
   /** Locked assumption (docs/csv-import.md): Little Hotelier reports in the hotel's base currency, USD. Never inferred per-row. */
   currency: "USD";
-  bookingChannel: null;
+  /** Inferred from the Reservation Number prefix; null when the prefix is unknown. */
+  bookingChannel: BookingChannel | null;
   notes: string | null;
 };
+
+// Little Hotelier prefixes each Reservation Number with its source system
+// (e.g. "LH26091959154638", "BDC-5134582030"). Matched on the full run of
+// leading letters, case-insensitively, so "LH" never matches "LHX…".
+const CHANNEL_BY_PREFIX = {
+  LH: "Directo",
+  BDC: "Booking.com",
+  EXP: "Expedia",
+  SMP: "Simple Booking",
+  HWL: "Hostelworld"
+} as const;
+
+export type BookingChannel = (typeof CHANNEL_BY_PREFIX)[keyof typeof CHANNEL_BY_PREFIX];
+
+export function inferBookingChannel(reference: string | null | undefined): BookingChannel | null {
+  const prefix = reference?.trim().match(/^[a-z]+/i)?.[0].toUpperCase();
+  return prefix && prefix in CHANNEL_BY_PREFIX ? CHANNEL_BY_PREFIX[prefix as keyof typeof CHANNEL_BY_PREFIX] : null;
+}
 
 export type NormalizeReservationError =
   | "MISSING_REQUIRED_FIELDS"
@@ -64,12 +83,13 @@ export function normalizeReservationRow(row: Record<string, string>, headers: st
   if (!resolvedRoom.unitCodes.length) return { ok: false, error: "UNRESOLVED_ROOM" };
 
   const pax = parsePax(findValue(row, headers, HEADER_ALIASES.pax));
+  const reference = findValue(row, headers, HEADER_ALIASES.reference) ?? null;
 
   return {
     ok: true,
     warnings: resolvedRoom.warnings,
     reservation: {
-      reference: findValue(row, headers, HEADER_ALIASES.reference) ?? null,
+      reference,
       guestName: findValue(row, headers, HEADER_ALIASES.guestName) ?? null,
       roomUnitCodes: resolvedRoom.unitCodes,
       arrivalDate,
@@ -80,7 +100,7 @@ export function normalizeReservationRow(row: Record<string, string>, headers: st
       totalAmount: toNumberOrNull(findValue(row, headers, HEADER_ALIASES.total)),
       outstandingBalance: toNumberOrNull(findValue(row, headers, HEADER_ALIASES.balance)),
       currency: "USD",
-      bookingChannel: null,
+      bookingChannel: inferBookingChannel(reference),
       notes: findValue(row, headers, HEADER_ALIASES.notes) ?? null
     }
   };

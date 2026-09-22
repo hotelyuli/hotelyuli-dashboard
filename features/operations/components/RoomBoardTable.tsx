@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { History, MoveRight, Pencil, Repeat } from "lucide-react";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
+import { HOUSEKEEPERS, bedSetupLabel, supportsBedSetup } from "@/features/operations/logic/room-setup";
 
 export type BoardRow = {
   rowId: string | null;
@@ -31,6 +32,11 @@ export type BoardRow = {
   notes: string | null;
   housekeepingCategory: "priority" | "vacant_after_departure" | "remains_occupied" | null;
   sameDayArrival: boolean;
+  unitCode: string;
+  housekeeper: string | null;
+  bedSetup: "king" | "two_twin" | null;
+  /** "HH:MM" (Postgres time trimmed to minutes) or null. */
+  breakfastToGoTime: string | null;
 };
 
 export type RoomOption = { id: string; displayName: string };
@@ -84,19 +90,20 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
           <tbody>
             {rows.map((row) => (
               <tr key={row.roomId}>
-                <td><strong>{row.roomLabel}</strong></td>
+                <td><strong>{row.roomLabel}</strong>{row.bedSetup && <small className="housekeeping-note">{bedSetupLabel(row.bedSetup, locale)}</small>}</td>
                 <td>{row.guestName ?? "—"}</td>
                 <td>{row.totalPax || "—"}</td>
                 <td>
                   <span className={`status-badge status-${row.operationalStatus}`}>{statusLabel[row.operationalStatus]}</span>
                   {row.housekeepingCategory && <small className="housekeeping-note">{housekeepingLabel[row.housekeepingCategory]}</small>}
                   {row.sameDayArrival && <small className="housekeeping-note">{t.sameDaySwap}</small>}
+                  {row.housekeeper && <small className="housekeeping-note">{t.fieldHousekeeper}: {row.housekeeper === "Other" ? t.housekeeperOther : row.housekeeper}</small>}
                 </td>
                 <td>{row.paymentStatus === "partial" ? t.paymentPartial : row.paymentStatus ? (paymentStatusLabel[row.paymentStatus] ?? row.paymentStatus) : "—"}{row.paymentMethod && <small>{row.paymentMethod}</small>}</td>
                 <td>{row.outstandingBalance != null ? `${row.currency ?? ""} ${row.outstandingBalance.toFixed(2)}` : "—"}</td>
                 <td>
                   {row.breakfastStatus === "included" ? (
-                    <span>{t.breakfastIncluded} · {row.breakfastPax}{row.breakfastToGo ? ` (${t.toGo})` : ""}</span>
+                    <span>{t.breakfastIncluded} · {row.breakfastPax}{row.breakfastToGo ? ` (${t.toGo}${row.breakfastToGoTime ? ` ${row.breakfastToGoTime}` : ""})` : ""}</span>
                   ) : "—"}
                 </td>
                 <td>{row.carPlate ?? "—"}</td>
@@ -144,6 +151,10 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
   const [breakfastPax, setBreakfastPax] = useState(String(row.breakfastPax));
   const [breakfastToGo, setBreakfastToGo] = useState(row.breakfastToGo);
   const [breakfastNotes, setBreakfastNotes] = useState(row.breakfastNotes ?? "");
+  const [housekeeper, setHousekeeper] = useState(row.housekeeper ?? "");
+  const [bedSetup, setBedSetup] = useState(row.bedSetup ?? "");
+  const [breakfastToGoTime, setBreakfastToGoTime] = useState(row.breakfastToGoTime ?? "");
+  const hasBedSetup = supportsBedSetup(row.unitCode);
 
   function submit() {
     if (!row.rowId) return;
@@ -161,6 +172,9 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
     data.set("breakfastPax", breakfastPax);
     data.set("breakfastToGo", String(breakfastToGo));
     data.set("breakfastNotes", breakfastNotes);
+    data.set("housekeeper", housekeeper);
+    data.set("bedSetup", hasBedSetup ? bedSetup : "");
+    data.set("breakfastToGoTime", breakfastToGo ? breakfastToGoTime : "");
     startTransition(async () => {
       try {
         await updateOperationCell(data);
@@ -200,6 +214,20 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
             <input type="checkbox" checked={breakfastToGo} onChange={(e) => setBreakfastToGo(e.target.checked)} />
             {t.fieldBreakfastToGo}
           </label>
+          {breakfastToGo && <label>{t.fieldBreakfastToGoTime}<input type="time" value={breakfastToGoTime} onChange={(e) => setBreakfastToGoTime(e.target.value)} /></label>}
+          <label>{t.fieldHousekeeper}
+            <select value={housekeeper} onChange={(e) => setHousekeeper(e.target.value)}>
+              <option value="">{t.housekeeperUnassigned}</option>
+              {HOUSEKEEPERS.map((name) => <option key={name} value={name}>{name === "Other" ? t.housekeeperOther : name}</option>)}
+            </select>
+          </label>
+          {hasBedSetup && <label>{t.fieldBedSetup}
+            <select value={bedSetup} onChange={(e) => setBedSetup(e.target.value as typeof bedSetup)}>
+              <option value="">{t.bedSetupUnset}</option>
+              <option value="king">King</option>
+              <option value="two_twin">2 Twin</option>
+            </select>
+          </label>}
           <label>{t.fieldBreakfastNotes}<input value={breakfastNotes} onChange={(e) => setBreakfastNotes(e.target.value)} maxLength={300} /></label>
           <label className="full-width">{t.fieldNotes}<textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000} /></label>
         </div>

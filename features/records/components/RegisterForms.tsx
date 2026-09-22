@@ -4,8 +4,8 @@ import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
 import { formatInTimeZone } from "date-fns-tz";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
-import { registerEvent, registerIncome, registerTour } from "@/features/records/actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { findGuestForRoom, registerEvent, registerIncome, registerTour } from "@/features/records/actions";
 import { TOUR_OPERATORS, tourCommission } from "@/features/records/logic/tour-commission";
 import type { Locale } from "@/lib/i18n";
 
@@ -33,6 +33,23 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
   useEffect(()=>{let active=true;getContacts().then(data=>{if(active)setContacts(data);}).catch(()=>{if(active)setContactError(true);});return()=>{active=false;};},[]);
   const [operator, setOperator] = useState<string>(TOUR_OPERATORS[0]);
   const [tourPrice, setTourPrice] = useState("0");
+  const [tourRoom, setTourRoom] = useState("");
+  const [tourGuest, setTourGuest] = useState("");
+  const lastAutoGuest = useRef("");
+  // Fill the guest from today's board when a room is typed; never overwrite a name the user typed.
+  useEffect(() => {
+    if (kind !== "tour" || !tourRoom.trim()) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      findGuestForRoom(tourRoom).then((guest) => {
+        if (!active) return;
+        // A vacant room clears a previously auto-filled name, but never a typed one.
+        setTourGuest((current) => (current === "" || current === lastAutoGuest.current ? guest ?? "" : current));
+        lastAutoGuest.current = guest ?? "";
+      }).catch(() => {});
+    }, 350);
+    return () => { active = false; clearTimeout(timer); };
+  }, [kind, tourRoom]);
   const numericPrice = Number(tourPrice);
   const commission = Number.isFinite(numericPrice) && numericPrice >= 0 && numericPrice <= 1_000_000_000 ? tourCommission(numericPrice).toFixed(2) : "";
   const es = locale === "es";
@@ -72,7 +89,7 @@ ${es ? "Acción tomada" : "Action taken"}: ${formData.get("actionTaken")}`});
     </>}
     {kind === "event" && category === "maintenance" && <p className="full-width">{es?"Después de guardar podrá seleccionar al proveedor y abrir WhatsApp.":"After saving, select a supplier and open WhatsApp."}</p>}
     {kind === "tour" && <>
-      <label>{es ? "Huésped" : "Guest"}<input name="guestName" required /></label><label>{es ? "Habitación" : "Room"}<input name="roomNumber" /></label>
+      <label>{es ? "Habitación" : "Room"}<input name="roomNumber" value={tourRoom} onChange={e => setTourRoom(e.target.value)} maxLength={20} /></label><label>{es ? "Huésped" : "Guest"}<input name="guestName" value={tourGuest} onChange={e => setTourGuest(e.target.value)} required /></label>
       <label>{es ? "Operador" : "Operator"}<select name={operator === "other" ? undefined : "operatorName"} value={operator} onChange={e => setOperator(e.target.value)} required>{TOUR_OPERATORS.map(name => <option key={name} value={name}>{name}</option>)}<option value="other">{es ? "Otros" : "Others"}</option></select>{operator === "other" && <input name="operatorName" aria-label={es ? "Nombre del operador" : "Operator name"} placeholder={es ? "Nombre del operador" : "Operator name"} maxLength={120} required />}</label><label>Tour<select name="tourName" defaultValue="Whale Watching" required>{["Whale Watching", "Isla del Caño Snorkeling", "Corcovado", "Cataratas Nauyaca", "Alturas Wildlife Sanctuary", "Manglar de Sierpe", "Transfer", "Sound Healing", "Other"].map(tour => <option key={tour} value={tour}>{tour === "Other" && es ? "Otro" : tour}</option>)}</select></label>
       <label>{es ? "Fecha del tour" : "Tour date"}<input name="tourDate" type="date" defaultValue={today} required /></label><label>{es ? "Adultos" : "Adults"}<input name="adults" type="number" min="0" defaultValue="2" required /></label>
       <label>{es ? "Niños" : "Children"}<input name="children" type="number" min="0" defaultValue="0" required /></label><label>{es ? "Precio total" : "Total price"}<input name="totalPrice" type="number" min="0" max="1000000000" step="0.01" value={tourPrice} onChange={e => setTourPrice(e.target.value)} required /></label>

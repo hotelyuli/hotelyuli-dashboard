@@ -77,12 +77,24 @@ is hardcoded to `USD` — never inferred per-row. CRC only ever enters the
 system later, via manual income entry (a later module), never through this
 importer.
 
-## Booking channel — not inferred
+## Booking channel — inferred from the reference prefix
 
-`Reservation Number` carries a per-channel prefix (e.g. distinct prefixes
-per source system), but the channel is **not** decoded from it. `reference`
-stores the reservation number as-is; `booking_channel` is left `null` by the
-importer. This may be revisited later, but is out of scope here.
+`Reservation Number` carries a per-channel prefix. `inferBookingChannel()` in
+`reservation-normalizer.ts` reads the full run of leading letters
+(case-insensitive) and maps it:
+
+| Prefix | booking_channel |
+|---|---|
+| `LH` | Directo |
+| `BDC` | Booking.com |
+| `EXP` | Expedia |
+| `SMP` | Simple Booking |
+| `HWL` | Hostelworld |
+
+Any other prefix, or no reference, stores `null`. `reference` is still stored
+as-is. The channel is copied onto the board row (`daily_operations`) when the
+board is materialized. Rows imported before this existed are filled once by
+`supabase/backfills/0018_booking_channel.sql`.
 
 ## Payment status derivation
 

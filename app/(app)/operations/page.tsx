@@ -17,13 +17,13 @@ export default async function OperationsPage() {
   const [{ data: rooms }, { data: operations }] = await Promise.all([
     supabase
       .from("rooms")
-      .select("id, display_name, room_number, sort_order, active")
+      .select("id, display_name, room_number, sort_order, active, unit_code")
       .eq("hotel_id", hotelId)
       .order("sort_order", { ascending: true }),
     supabase
       .from("daily_operations")
       .select(
-        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival"
+        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
       )
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate)
@@ -57,7 +57,11 @@ export default async function OperationsPage() {
       bookingChannel: op?.booking_channel ?? null,
       notes: op?.notes ?? null,
       housekeepingCategory: op?.housekeeping_category ?? null,
-      sameDayArrival: op?.same_day_arrival ?? false
+      sameDayArrival: op?.same_day_arrival ?? false,
+      unitCode: room.unit_code,
+      housekeeper: op?.housekeeper ?? null,
+      bedSetup: op?.bed_setup ?? null,
+      breakfastToGoTime: op?.breakfast_to_go_time?.slice(0, 5) ?? null
     };
   });
 
