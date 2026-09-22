@@ -5,7 +5,7 @@ with check (hotel_id = public.current_hotel_id() and public.current_app_role() i
 create policy tasks_update on public.tasks for update to authenticated
 using (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'))
 with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'));
-create function public.preserve_task_creator() returns trigger language plpgsql set search_path = public as $$
+create function public.preserve_task_creator() returns trigger language plpgsql set search_path = '' as $$
 begin
   new.created_by := old.created_by;
   return new;
