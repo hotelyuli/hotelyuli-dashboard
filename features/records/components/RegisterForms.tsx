@@ -1,4 +1,5 @@
 "use client";
+import { CalendarPlus, Palmtree, Banknote } from "lucide-react";
 import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
 import { formatInTimeZone } from "date-fns-tz";
@@ -12,7 +13,8 @@ type Kind = "event" | "tour" | "income";
 export function RegisterButton({ kind, locale, defaultBookedBy = "" }: { kind: Kind; locale: Locale; defaultBookedBy?: string }) {
   const [open, setOpen] = useState(false);
   const label = kind === "event" ? (locale === "es" ? "Registrar evento" : "Register event") : kind === "tour" ? (locale === "es" ? "Registrar tour" : "Register tour") : (locale === "es" ? "Registrar ingreso" : "Register income");
-  return <><button className="primary-button" onClick={() => setOpen(true)}>+ {label}</button>{open && <RegisterModal kind={kind} locale={locale} label={label} defaultBookedBy={defaultBookedBy} onClose={() => setOpen(false)} />}</>;
+  const Icon = kind === "event" ? CalendarPlus : kind === "tour" ? Palmtree : Banknote;
+  return <><button className={`primary-button register-trigger register-${kind}`} onClick={() => setOpen(true)}><Icon size={17} aria-hidden="true" />{label}</button>{open && <RegisterModal kind={kind} locale={locale} label={label} defaultBookedBy={defaultBookedBy} onClose={() => setOpen(false)} />}</>;
 }
 
 function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind: Kind; locale: Locale; label: string; defaultBookedBy: string; onClose: () => void }) {

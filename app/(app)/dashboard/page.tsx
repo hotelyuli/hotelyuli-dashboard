@@ -1,4 +1,4 @@
-import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Waves } from "lucide-react";
+import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Waves, BrushCleaning, LockKeyhole } from "lucide-react";
 import { RegisterButton } from "@/features/records/components/RegisterForms";
 import Link from "next/link";
 import { cookies } from "next/headers";
@@ -101,14 +101,14 @@ export default async function DashboardPage() {
   ];
   return (
     <main className="reception-dashboard">
-      <div className="reception-imports"><span className="eyebrow">LITTLE HOTELIER</span><CsvImportPanel locale={locale} /></div>
-      <div className="reception-toolbar">
+      <section className="reception-imports"><div className="section-caption"><h2>{es ? "Importación de datos" : "Data import"}</h2><span>LITTLE HOTELIER · CSV</span></div><CsvImportPanel locale={locale} variant="cards" /></section>
+      <div className="reception-toolbar"><div className="section-caption"><h2>{es ? "Acciones de turno" : "Shift actions"}</h2><span>{es ? "ACCESOS RÁPIDOS" : "QUICK ACTIONS"}</span></div>
         <RegisterButton kind="event" locale={locale} />
-        <Link className="secondary-button" href="/breakfast">{es ? "Reporte de desayuno" : "Breakfast report"}</Link>
-        <Link className="secondary-button" href="/housekeeping">{es ? "Lista de limpieza" : "Housekeeping list"}</Link>
+        <Link className="secondary-button" href="/breakfast"><Coffee size={17} aria-hidden="true" />{es ? "Reporte de desayuno" : "Breakfast report"}</Link>
+        <Link className="secondary-button" href="/housekeeping"><BrushCleaning size={17} aria-hidden="true" />{es ? "Lista de limpieza" : "Housekeeping list"}</Link>
         <RegisterButton kind="tour" locale={locale} defaultBookedBy={profile?.full_name ?? ""} />
         <RegisterButton kind="income" locale={locale} />
-        <Link className="primary-button close-shift-link" href={`/reports?shift=${shift}`}>{es ? "Cerrar turno" : "Close shift"}</Link>
+        <Link className="primary-button close-shift-link" href={`/reports?shift=${shift}`}><LockKeyhole size={17} aria-hidden="true" />{es ? "Cerrar turno" : "Close shift"}</Link>
       </div>
       <div className="reception-columns">
         <div className="reception-main">
