@@ -1,5 +1,6 @@
 "use server";
 
+import { tourCommission } from "./logic/tour-commission";
 import { revalidatePath } from "next/cache";
 import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
@@ -52,7 +53,7 @@ const tourSchema = z.object({
   guestName: z.string().trim().min(1).max(120), roomNumber: z.string().trim().max(20),
   operatorName: z.string().trim().min(1).max(120), tourName: z.string().trim().min(1).max(120),
   tourDate: z.string().date(), adults: z.coerce.number().int().min(0), children: z.coerce.number().int().min(0),
-  totalPrice: z.coerce.number().min(0), currency: z.enum(["USD", "CRC"]), commissionAmount: z.coerce.number().min(0),
+  totalPrice: z.coerce.number().min(0).max(1_000_000_000), currency: z.enum(["USD", "CRC"]),
   status: z.enum(["paid", "pending", "cancelled"]), paymentMethod: z.string().trim().max(80).default(""),
   receiptNumber: z.string().trim().max(80).default(""), bookedBy: z.string().trim().min(1).max(120), notes: z.string().trim().max(1000)
 });
@@ -62,7 +63,7 @@ export async function registerTour(formData: FormData) {
   const parsed = tourSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error("INVALID_INPUT");
   const d = parsed.data;
-  const payload = { hotel_id: profile.hotel_id, operation_date: operationDate, guest_name: d.guestName, room_number: d.roomNumber || null, operator_name: d.operatorName, tour_name: d.tourName, tour_date: d.tourDate, adults: d.adults, children: d.children, total_price: d.totalPrice, currency: d.currency, commission_amount: d.commissionAmount, status: d.status, payment_method: d.paymentMethod || null, receipt_number: d.receiptNumber || null, booked_by: d.bookedBy, notes: d.notes || null, created_by: user.id };
+  const payload = { hotel_id: profile.hotel_id, operation_date: operationDate, guest_name: d.guestName, room_number: d.roomNumber || null, operator_name: d.operatorName, tour_name: d.tourName, tour_date: d.tourDate, adults: d.adults, children: d.children, total_price: d.totalPrice, currency: d.currency, commission_amount: tourCommission(d.totalPrice), status: d.status, payment_method: d.paymentMethod || null, receipt_number: d.receiptNumber || null, booked_by: d.bookedBy, notes: d.notes || null, created_by: user.id };
   const { data: tour, error } = await supabase.from("tour_bookings").insert(payload).select("id").single();
   if (error || !tour) throw new Error("SAVE_FAILED");
   const { error: queueError } = await supabase.from("google_sheets_outbox").insert({ hotel_id: profile.hotel_id, entity_type: "tour", entity_id: tour.id, payload });

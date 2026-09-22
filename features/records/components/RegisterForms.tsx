@@ -6,6 +6,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { registerEvent, registerIncome, registerTour } from "@/features/records/actions";
+import { TOUR_OPERATORS, tourCommission } from "@/features/records/logic/tour-commission";
 import type { Locale } from "@/lib/i18n";
 
 type Kind = "event" | "tour" | "income";
@@ -21,6 +22,10 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [operator, setOperator] = useState<string>(TOUR_OPERATORS[0]);
+  const [tourPrice, setTourPrice] = useState("0");
+  const numericPrice = Number(tourPrice);
+  const commission = Number.isFinite(numericPrice) && numericPrice >= 0 && numericPrice <= 1_000_000_000 ? tourCommission(numericPrice).toFixed(2) : "";
   const es = locale === "es";
   const today = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const time = formatInTimeZone(new Date(), "America/Costa_Rica", "HH:mm");
@@ -42,10 +47,10 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
     </>}
     {kind === "tour" && <>
       <label>{es ? "Huésped" : "Guest"}<input name="guestName" required /></label><label>{es ? "Habitación" : "Room"}<input name="roomNumber" /></label>
-      <label>{es ? "Operador" : "Operator"}<input name="operatorName" defaultValue="Ballena Tours" required /></label><label>Tour<select name="tourName" defaultValue="Whale Watching" required>{["Whale Watching", "Isla del Caño Snorkeling", "Corcovado", "Cataratas Nauyaca", "Alturas Wildlife Sanctuary", "Manglar de Sierpe", "Transfer", "Sound Healing", "Other"].map(tour => <option key={tour} value={tour}>{tour === "Other" && es ? "Otro" : tour}</option>)}</select></label>
+      <label>{es ? "Operador" : "Operator"}<select name={operator === "other" ? undefined : "operatorName"} value={operator} onChange={e => setOperator(e.target.value)} required>{TOUR_OPERATORS.map(name => <option key={name} value={name}>{name}</option>)}<option value="other">{es ? "Otros" : "Others"}</option></select>{operator === "other" && <input name="operatorName" aria-label={es ? "Nombre del operador" : "Operator name"} placeholder={es ? "Nombre del operador" : "Operator name"} maxLength={120} required />}</label><label>Tour<select name="tourName" defaultValue="Whale Watching" required>{["Whale Watching", "Isla del Caño Snorkeling", "Corcovado", "Cataratas Nauyaca", "Alturas Wildlife Sanctuary", "Manglar de Sierpe", "Transfer", "Sound Healing", "Other"].map(tour => <option key={tour} value={tour}>{tour === "Other" && es ? "Otro" : tour}</option>)}</select></label>
       <label>{es ? "Fecha del tour" : "Tour date"}<input name="tourDate" type="date" defaultValue={today} required /></label><label>{es ? "Adultos" : "Adults"}<input name="adults" type="number" min="0" defaultValue="2" required /></label>
-      <label>{es ? "Niños" : "Children"}<input name="children" type="number" min="0" defaultValue="0" required /></label><label>{es ? "Precio total" : "Total price"}<input name="totalPrice" type="number" min="0" step="0.01" defaultValue="0" required /></label>
-      <label>{es ? "Moneda" : "Currency"}<select name="currency" defaultValue="USD"><option>USD</option><option>CRC</option></select></label><label>{es ? "Comisión" : "Commission"}<input name="commissionAmount" type="number" min="0" step="0.01" defaultValue="0" required /></label>
+      <label>{es ? "Niños" : "Children"}<input name="children" type="number" min="0" defaultValue="0" required /></label><label>{es ? "Precio total" : "Total price"}<input name="totalPrice" type="number" min="0" max="1000000000" step="0.01" value={tourPrice} onChange={e => setTourPrice(e.target.value)} required /></label>
+      <label>{es ? "Moneda" : "Currency"}<select name="currency" defaultValue="USD"><option>USD</option><option>CRC</option></select></label><label>{es ? "Comisión 20%" : "Commission 20%"}<input name="commissionAmount" type="number" value={commission} readOnly aria-live="polite" /><small>{es ? "Calculada automáticamente del precio total" : "Automatically calculated from the total price"}</small></label>
       <input type="hidden" name="status" value="pending" /><label>{es ? "Reservado por" : "Booked by"}<input name="bookedBy" defaultValue={defaultBookedBy} required /></label>
       <label className="full-width">{es ? "Notas" : "Notes"}<input name="notes" /></label>
     </>}
