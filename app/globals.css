@@ -327,3 +327,9 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .supplier-manage .secondary-button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:6px 14px;font-size:12px}
 .supplier-manage .danger-button{color:#8f3b3b;border-color:#efc9c6}
 .supplier-manage .danger-button:hover{background:#f8e4e3}
+/* Incidents: WhatsApp share on every row + supplier "Otro" */
+.incident-whatsapp{display:grid;gap:8px;min-width:190px;white-space:normal}
+.incident-whatsapp>.whatsapp-button{width:fit-content}
+.supplier-other{display:grid;gap:6px;margin-top:6px}
+.supplier-other input{min-height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.supplier-other small{font-size:11px;color:#8f3b3b}
