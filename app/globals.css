@@ -275,3 +275,12 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .cleaning-clean{background:#e3eee6;color:var(--success)}
 .cleaning-controls .cleaning-action{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:6px 12px;font-size:12px}
 .cleaning-controls .form-error{width:100%;margin:0;font-size:12px}
+/* /tasks: stacked task editor in the Update column */
+.task-editor{display:grid;gap:8px;min-width:230px;white-space:normal}
+.task-editor label{display:grid;gap:4px;font-size:11px;font-weight:650;color:var(--muted)}
+.task-editor select,.task-editor input{width:100%;min-height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink);font-size:12px}
+.task-editor select:focus,.task-editor input:focus{outline:none;border-color:var(--terracotta);box-shadow:0 0 0 3px #c97b7722}
+.task-editor-footer{display:flex;align-items:center;gap:10px}
+.task-editor-footer .secondary-button{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:5px 12px;font-size:12px}
+.task-saved{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:650;color:var(--success)}
+.task-editor .form-error{margin:0;font-size:12px}

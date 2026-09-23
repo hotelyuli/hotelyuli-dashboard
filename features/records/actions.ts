@@ -182,20 +182,24 @@ export async function registerIncome(formData: FormData) {
   revalidatePath("/income"); revalidatePath("/dashboard");
 }
 
-export async function updateTask(formData: FormData) {
-  const { supabase, profile } = await authorizeWrite();
-  const parsed = z.object({
-    id: z.string().uuid(),
-    status: z.enum(["open", "in_progress", "completed", "cancelled"]),
-    assignedTo: z.string().trim().max(120)
-  }).safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error("INVALID_INPUT");
-  const { data, error } = await supabase.from("tasks").update({
-    status: parsed.data.status,
-    assigned_to: parsed.data.assignedTo || null,
-    updated_at: new Date().toISOString()
-  }).eq("id", parsed.data.id).eq("hotel_id", profile.hotel_id).select("id").single();
-  if (error || !data) throw new Error("SAVE_FAILED");
-  revalidatePath("/tasks");
-  revalidatePath("/dashboard");
+/** Saves a task's status and assignee (tasks.assigned_to). Returns the real error instead of throwing. */
+export async function updateTask(formData: FormData): Promise<ActionResult> {
+  return runAction("updateTask", async () => {
+    const { supabase, profile } = await authorizeWrite();
+    const parsed = z.object({
+      id: z.string().uuid(),
+      status: z.enum(["open", "in_progress", "completed", "cancelled"]),
+      assignedTo: z.string().trim().max(120)
+    }).safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error(`INVALID_INPUT: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`);
+    const { data, error } = await supabase.from("tasks").update({
+      status: parsed.data.status,
+      assigned_to: parsed.data.assignedTo || null,
+      updated_at: new Date().toISOString()
+    }).eq("id", parsed.data.id).eq("hotel_id", profile.hotel_id).select("id");
+    if (error) throw new Error(`SAVE_FAILED: ${error.message}`);
+    if (!data?.length) throw new Error("NOT_UPDATED: the task was not found or you are not allowed to edit it");
+    revalidatePath("/tasks");
+    revalidatePath("/dashboard");
+  });
 }
