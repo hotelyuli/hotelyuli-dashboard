@@ -116,9 +116,9 @@ export type Database = {
         Relationships: [];
       };
       income_entries: {
-        Row: { id: string; hotel_id: string; operation_date: string; room_number: string | null; guest_name: string; paid: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note: string | null; created_by: string; created_at: string; updated_at: string };
-        Insert: { id?: string; hotel_id: string; operation_date: string; room_number?: string | null; guest_name: string; paid?: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note?: string | null; created_by: string; created_at?: string; updated_at?: string };
-        Update: { room_number?: string | null; guest_name?: string; paid?: boolean; category?: string; amount?: number; currency?: "USD" | "CRC"; payment_method?: string; reference_note?: string | null; updated_at?: string };
+        Row: { id: string; hotel_id: string; operation_date: string; room_number: string | null; guest_name: string; paid: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note: string | null; created_by: string; entry_type: "payment" | "reversal"; source_type: "tour" | "accommodation" | null; source_id: string | null; settlement_seq: number | null; reverses_entry_id: string | null; reason: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; hotel_id: string; operation_date: string; room_number?: string | null; guest_name: string; paid?: boolean; category: string; amount: number; currency: "USD" | "CRC"; payment_method: string; reference_note?: string | null; created_by: string; entry_type?: "payment" | "reversal"; source_type?: "tour" | "accommodation" | null; source_id?: string | null; settlement_seq?: number | null; reverses_entry_id?: string | null; reason?: string | null; created_at?: string; updated_at?: string };
+        Update: never;
         Relationships: [];
       };
       shift_reports: {

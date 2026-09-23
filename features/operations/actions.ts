@@ -7,6 +7,7 @@ import { can } from "@/features/auth/logic/permissions";
 import type { AppRole } from "@/features/auth/logic/permissions";
 import { materializeUnit, type ReservationForBoard } from "@/features/operations/logic/board";
 import { BED_SETUPS, HOUSEKEEPERS, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
+import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
 
 async function authorizeOperationsWrite() {
   const { supabase, user } = await requireSession();
@@ -31,22 +32,52 @@ const updateCellSchema = z.object({
   currency: z.enum(["USD", "CRC", ""]),
   housekeeper: z.enum(["", ...HOUSEKEEPERS]),
   bedSetup: z.enum(["", ...BED_SETUPS]),
-  breakfastToGoTime: z.string().regex(/^(\d{2}:\d{2})?$/)
+  breakfastToGoTime: z.string().regex(/^(\d{2}:\d{2})?$/),
+  /** Amount collected; only read when the status changes to paid. */
+  amountReceived: z.string().trim().default(""),
+  /** Why a paid stay is being un-paid; only read when the status leaves paid. */
+  paymentReason: z.string().trim().max(500).default("")
 });
 
 export async function updateOperationCell(formData: FormData) {
-  const { supabase, hotelId } = await authorizeOperationsWrite();
+  const { supabase, user, hotelId } = await authorizeOperationsWrite();
   const parsed = updateCellSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error("INVALID_INPUT");
   const data = parsed.data;
-  const outstandingBalance = data.outstandingBalance === "" ? null : Number.parseFloat(data.outstandingBalance);
+  let outstandingBalance = data.outstandingBalance === "" ? null : Number.parseFloat(data.outstandingBalance);
+
+  const { data: current } = await supabase.from("daily_operations").select("room_id, reservation_id, payment_status, guest_name, operation_date").eq("id", data.rowId).eq("hotel_id", hotelId).single();
+  if (!current) throw new Error("NOT_FOUND");
+  const { data: room } = await supabase.from("rooms").select("unit_code, display_name").eq("id", current.room_id).eq("hotel_id", hotelId).single();
 
   // Bed setup only applies to the convertible rooms; anything else is stored as null.
-  let bedSetup: BedSetup | null = null;
-  if (data.bedSetup) {
-    const { data: cell } = await supabase.from("daily_operations").select("room_id").eq("id", data.rowId).eq("hotel_id", hotelId).single();
-    const { data: room } = cell ? await supabase.from("rooms").select("unit_code").eq("id", cell.room_id).eq("hotel_id", hotelId).single() : { data: null };
-    if (supportsBedSetup(room?.unit_code)) bedSetup = data.bedSetup;
+  const bedSetup: BedSetup | null = data.bedSetup && supportsBedSetup(room?.unit_code) ? data.bedSetup : null;
+
+  // Marking the stay paid books exactly one income row per reservation; leaving
+  // paid books a reversing row. The ledger is written before the board row.
+  const becomesPaid = data.paymentStatus === "paid" && current.payment_status !== "paid";
+  const leavesPaid = current.payment_status === "paid" && data.paymentStatus !== "paid";
+  if (becomesPaid || leavesPaid) {
+    const amountReceived = Number.parseFloat(data.amountReceived);
+    await applySettlement({
+      ledger: supabaseLedger({ supabase, hotelId, userId: user.id, operationDate: current.operation_date }),
+      source: { type: "accommodation", id: current.reservation_id ?? data.rowId },
+      wantPaid: becomesPaid,
+      payment: becomesPaid && data.currency ? {
+        amount: amountReceived,
+        currency: data.currency,
+        paymentMethod: data.paymentMethod,
+        category: "Accommodation",
+        guestName: data.guestName || current.guest_name || "—",
+        roomNumber: room?.display_name ?? null,
+        referenceNote: null
+      } : undefined,
+      reason: data.paymentReason
+    });
+    if (becomesPaid) {
+      outstandingBalance = 0;
+      if (current.reservation_id) await supabase.from("reservations").update({ outstanding_balance: 0, updated_at: new Date().toISOString() }).eq("id", current.reservation_id).eq("hotel_id", hotelId);
+    }
   }
 
   const { data: updated, error } = await supabase
@@ -80,6 +111,7 @@ export async function updateOperationCell(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/breakfast");
   revalidatePath("/housekeeping");
+  revalidatePath("/income");
 }
 
 const moveGuestSchema = z.object({ rowId: z.string().uuid(), targetRoomId: z.string().uuid() });

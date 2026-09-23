@@ -6,6 +6,7 @@ import { requireSession } from "@/features/auth/logic/guards";
 import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { reportInput, canClose, type ReportInput } from "./logic";
 import { requestShiftSummary } from "./ai";
+import { settledTotals } from "@/features/records/logic/settlement";
 import type { Json } from "@/lib/db/database.types";
 
 async function context(input: ReportInput) {
@@ -17,10 +18,11 @@ async function context(input: ReportInput) {
     supabase.from("shift_events").select("id,event_time,category,room_area,description,action_taken,status,priority").eq("hotel_id", hotel).eq("operation_date", input.date).order("event_time"),
     supabase.from("tasks").select("id,title,room_area,status,assigned_to,due_at,priority").eq("hotel_id", hotel).in("status", ["open", "in_progress"]).order("id"),
     supabase.from("daily_operations").select("operational_status,breakfast_status,breakfast_pax").eq("hotel_id", hotel).eq("operation_date", input.date),
-    supabase.from("income_entries").select("currency,amount,paid").eq("hotel_id", hotel).eq("operation_date", input.date),
+    supabase.from("income_entries").select("currency,amount,paid,entry_type").eq("hotel_id", hotel).eq("operation_date", input.date),
     supabase.from("tour_bookings").select("id,tour_name,tour_date,total_price,currency,commission_amount").eq("hotel_id",hotel).eq("operation_date",input.date).neq("status","cancelled").order("id")
   ]);
   if ([events,tasks,operations,income,tours].some(r => r.error)) throw new Error("SOURCE_LOAD_FAILED");
+  const settled = settledTotals((income.data ?? []).map(r => ({ amount: r.amount, currency: r.currency, paid: r.paid, entryType: r.entry_type })));
   const selected = (events.data ?? []).filter(e => input.eventIds.includes(e.id));
   if (selected.length !== new Set(input.eventIds).size) throw new Error("SOURCE_CHANGED");
   if ((tasks.data?.length ?? 0) > 100 || (events.data?.length ?? 0) >= 1000) throw new Error("SOURCE_TOO_LARGE");
@@ -30,8 +32,8 @@ async function context(input: ReportInput) {
     dailyContext: { toursRecordedToday: tours.data, plannedArrivals: operations.data?.filter(r => r.operational_status === "check_in").length ?? 0,
       staying: operations.data?.filter(r => r.operational_status === "staying").length ?? 0,
       includedBreakfastCovers: operations.data?.filter(r => r.breakfast_status === "included").reduce((n,r) => n+r.breakfast_pax,0) ?? 0,
-      recordedPaidIncomeUSD: income.data?.filter(r => r.paid && r.currency === "USD").reduce((n,r) => n+Number(r.amount),0) ?? 0,
-      recordedPaidIncomeCRC: income.data?.filter(r => r.paid && r.currency === "CRC").reduce((n,r) => n+Number(r.amount),0) ?? 0 }
+      recordedPaidIncomeUSD: settled.USD,
+      recordedPaidIncomeCRC: settled.CRC }
   };
   return { supabase, user, hotel, source, sourceHash: createHash("sha256").update(JSON.stringify(source)).digest("hex") };
 }

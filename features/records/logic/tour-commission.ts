@@ -6,3 +6,7 @@ export function tourCommission(total: number): number {
   const cents = Math.round((total + Number.EPSILON) * 100);
   return Math.round(cents / 5) / 100;
 }
+
+/** A paid tour books only the hotel's commission as income; the travel office collects the tour price. */
+export const TOUR_INCOME_CATEGORY = "Tour commission";
+export const TOUR_INCOME_METHOD = "Agency";

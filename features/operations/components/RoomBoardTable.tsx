@@ -155,9 +155,15 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
   const [bedSetup, setBedSetup] = useState(row.bedSetup ?? "");
   const [breakfastToGoTime, setBreakfastToGoTime] = useState(row.breakfastToGoTime ?? "");
   const hasBedSetup = supportsBedSetup(row.unitCode);
+  const becomesPaid = paymentStatus === "paid" && row.paymentStatus !== "paid";
+  const leavesPaid = row.paymentStatus === "paid" && paymentStatus !== "paid";
+  const [amountReceived, setAmountReceived] = useState(row.outstandingBalance != null && row.outstandingBalance > 0 ? String(row.outstandingBalance) : "");
+  const [paymentReason, setPaymentReason] = useState("");
 
   function submit() {
     if (!row.rowId) return;
+    if (becomesPaid && (!(Number(amountReceived) >= 0) || amountReceived === "" || !currency || !paymentMethod)) { setError(t.paidNeedsDetails); return; }
+    if (leavesPaid && !paymentReason.trim()) { setError(t.unpaidNeedsReason); return; }
     const data = new FormData();
     data.set("rowId", row.rowId);
     data.set("guestName", guestName);
@@ -175,6 +181,8 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
     data.set("housekeeper", housekeeper);
     data.set("bedSetup", hasBedSetup ? bedSetup : "");
     data.set("breakfastToGoTime", breakfastToGo ? breakfastToGoTime : "");
+    data.set("amountReceived", becomesPaid ? amountReceived : "");
+    data.set("paymentReason", leavesPaid ? paymentReason : "");
     startTransition(async () => {
       try {
         await updateOperationCell(data);
@@ -197,6 +205,8 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
           <label>{t.fieldChannel}<input value={bookingChannel} onChange={(e) => setBookingChannel(e.target.value)} maxLength={60} /></label>
           <label>{t.fieldPaymentMethod}<select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}><PaymentMethodOptions /></select></label>
           <label>{t.fieldPaymentStatus}<select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}><option value="">—</option><option value="paid">{t.paymentPaid}</option><option value="pending">{t.paymentPending}</option><option value="partial">{t.paymentPartial}</option></select></label>
+          {becomesPaid && <label>{t.fieldAmountReceived}<input type="number" min={0} step="0.01" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} required /><small>{t.paidCreatesIncome}</small></label>}
+          {leavesPaid && <label className="full-width">{t.fieldUnpaidReason}<input value={paymentReason} onChange={(e) => setPaymentReason(e.target.value)} maxLength={500} required /><small>{t.unpaidCreatesReversal}</small></label>}
           <label>{t.fieldBalance}<input type="number" step="0.01" value={outstandingBalance} onChange={(e) => setOutstandingBalance(e.target.value)} /></label>
           <label>{t.fieldCurrency}
             <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "CRC" | "")}>

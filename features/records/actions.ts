@@ -7,6 +7,8 @@ import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { resolveRoomTokens } from "@/features/operations/logic/room-resolver";
+import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
+import { TOUR_INCOME_CATEGORY, TOUR_INCOME_METHOD } from "./logic/tour-commission";
 
 async function authorizeWrite() {
   const { supabase, user } = await requireSession();
@@ -86,6 +88,50 @@ export async function registerTour(formData: FormData) {
   const { error: queueError } = await supabase.from("google_sheets_outbox").insert({ hotel_id: profile.hotel_id, entity_type: "tour", entity_id: tour.id, payload });
   if (queueError) throw new Error("QUEUE_FAILED");
   revalidatePath("/tours"); revalidatePath("/dashboard");
+}
+
+const tourStatusSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["pending", "paid", "cancelled"]),
+  reason: z.string().trim().max(500).default("")
+});
+
+/**
+ * Paid -> exactly one income row for the hotel's commission (idempotent).
+ * Leaving paid (pending/cancelled) -> a reversing income row with a mandatory reason.
+ * The ledger is written before the status, so a failed status update is healed by a retry.
+ */
+export async function setTourStatus(formData: FormData) {
+  const { supabase, user, profile, operationDate } = await authorizeWrite();
+  const parsed = tourStatusSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) throw new Error("INVALID_INPUT");
+  const { id, status, reason } = parsed.data;
+
+  const { data: tour, error: tourError } = await supabase
+    .from("tour_bookings")
+    .select("id, guest_name, room_number, operator_name, tour_name, tour_date, currency, commission_amount")
+    .eq("id", id).eq("hotel_id", profile.hotel_id).single();
+  if (tourError || !tour) throw new Error("NOT_FOUND");
+
+  await applySettlement({
+    ledger: supabaseLedger({ supabase, hotelId: profile.hotel_id, userId: user.id, operationDate }),
+    source: { type: "tour", id: tour.id },
+    wantPaid: status === "paid",
+    payment: {
+      amount: Number(tour.commission_amount),
+      currency: tour.currency,
+      paymentMethod: TOUR_INCOME_METHOD,
+      category: TOUR_INCOME_CATEGORY,
+      guestName: tour.guest_name,
+      roomNumber: tour.room_number,
+      referenceNote: `${tour.tour_name} · ${tour.tour_date} · ${tour.operator_name}`
+    },
+    reason
+  });
+
+  const { data: updated, error } = await supabase.from("tour_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", tour.id).eq("hotel_id", profile.hotel_id).select("id").single();
+  if (error || !updated) throw new Error("SAVE_FAILED");
+  revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard");
 }
 
 const incomeSchema = z.object({

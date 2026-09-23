@@ -11,6 +11,7 @@ import {
   type BoardRow,
   type RoomOption
 } from "@/features/operations/components/RoomBoardTable";
+import { settledTotals } from "@/features/records/logic/settlement";
 
 export const metadata = { title: "Dashboard" };
 
@@ -23,7 +24,7 @@ export default async function DashboardPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }, { data: events, error: eventError }, { count: tourCount, error: tourError }] = await Promise.all([
+  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }, { data: events, error: eventError }, { data: tours, error: tourError }, { data: income }] = await Promise.all([
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
     supabase
@@ -42,10 +43,14 @@ export default async function DashboardPage() {
       .eq("hotel_id", hotelId).in("status", ["open", "in_progress"])
       .order("created_at", { ascending: false }).limit(5),
     supabase.from("shift_events").select("id,event_time,room_area,description,status").eq("hotel_id", hotelId).eq("operation_date", operationDate).order("event_time", { ascending: false }).limit(4),
-    supabase.from("tour_bookings").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("tour_date", operationDate).neq("status", "cancelled")
+    supabase.from("tour_bookings").select("status").eq("hotel_id", hotelId).eq("tour_date", operationDate).neq("status", "cancelled"),
+    supabase.from("income_entries").select("amount, currency, paid, entry_type").eq("hotel_id", hotelId).eq("operation_date", operationDate)
   ]);
 
   if (taskError || eventError || tourError) throw new Error("TASKS_LOAD_FAILED");
+  const tourCount = tours?.length ?? 0;
+  const paidTourCount = (tours ?? []).filter((tour) => tour.status === "paid").length;
+  const incomeToday = settledTotals((income ?? []).map((entry) => ({ amount: entry.amount, currency: entry.currency, paid: entry.paid, entryType: entry.entry_type })));
   const rows = operations ?? [];
   const stayThrough = rows.filter((row) => row.operational_status === "staying").length;
 
@@ -100,7 +105,7 @@ export default async function DashboardPage() {
     { label: t.breakfasts, value: breakfastCovers, note: t.includedCovers, icon: Coffee },
     { label: t.pendingPayments, value: pending.length, note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign },
     { label: t.openTasks, value: taskCount ?? 0, note: t.activeFollowups, icon: ClipboardCheck },
-    { label: es ? "Tours de hoy" : "Today's tours", value: tourCount ?? 0, note: es ? "reservas de tours" : "tour bookings", icon: Waves }
+    { label: es ? "Tours de hoy" : "Today's tours", value: tourCount, note: es ? `${paidTourCount} pagados` : `${paidTourCount} paid`, icon: Waves }
   ];
   return (
     <main className="reception-dashboard">
@@ -112,6 +117,7 @@ export default async function DashboardPage() {
           </section>
           <div className="occupancy-bar"><span>{es ? "Ocupación de hoy" : "Today's occupancy"}: <strong>{occupied}/{capacity} · {occupancy}%</strong></span><progress value={occupancy} max={100} aria-label={es ? "Ocupación" : "Occupancy"} /></div>
           <section className="reception-panel" aria-labelledby="room-board-title"><div className="panel-title"><h2 id="room-board-title">{t.operationsTitle}</h2><span className="count-pill">{boardRows.length} {es ? "unidades" : "units"}</span></div><RoomBoardTable rows={boardRows} rooms={roomOptions} locale={locale} /></section>
+          <section className="reception-panel"><div className="panel-title"><h2>{es ? "Ingresos de hoy" : "Today's income"}</h2><Link href="/income">{es ? "Ver ingresos" : "View income"}</Link></div><div className="pending-totals"><strong>USD {incomeToday.USD.toFixed(2)}</strong><strong>CRC {incomeToday.CRC.toFixed(2)}</strong></div><p className="panel-note">{es ? "Solo lo cobrado, incluidas comisiones de tours pagados; los reversos restan." : "Settled money only, including paid tour commissions; reversals subtract."}</p></section>
           <section className="reception-panel"><div className="panel-title"><h2>{t.pendingPayments}</h2></div><div className="pending-totals"><strong>USD {pendingUsd.toFixed(2)}</strong><strong>CRC {pendingCrc.toFixed(2)}</strong></div><p className="panel-note">{es ? "USD y CRC se mantienen separados." : "USD and CRC are kept separate."}</p></section>
         </div>
         <aside className="reception-sidebar">
