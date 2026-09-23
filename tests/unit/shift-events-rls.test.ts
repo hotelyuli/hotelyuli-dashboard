@@ -17,6 +17,7 @@ const OTHER_HOTEL = "99999999-9999-4999-8999-999999999999";
 const AUTHOR = "22222222-2222-4222-8222-222222222222";
 const RECEPTIONIST = "33333333-3333-4333-8333-333333333333";
 const OUTSIDER = "44444444-4444-4444-8444-444444444444";
+const HOUSEKEEPER = "55555555-5555-4555-8555-555555555555";
 let db: PGlite;
 let eventId: string;
 
@@ -32,12 +33,14 @@ beforeAll(async () => {
     grant select, insert, update, delete on all tables in schema public to authenticated;
     grant execute on all functions in schema auth to authenticated;
     insert into public.hotels (id, name, slug) values ('${HOTEL}', 'Hotel Yuli', 'hotel-yuli'), ('${OTHER_HOTEL}', 'Other', 'other');
-    insert into auth.users (id) values ('${AUTHOR}'), ('${RECEPTIONIST}'), ('${OUTSIDER}');
+    insert into auth.users (id) values ('${AUTHOR}'), ('${RECEPTIONIST}'), ('${OUTSIDER}'), ('${HOUSEKEEPER}');
     insert into public.profiles (id, hotel_id, full_name, role) values
-      ('${AUTHOR}', '${HOTEL}', 'Grettel', 'reception'), ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'), ('${OUTSIDER}', '${OTHER_HOTEL}', 'Outsider', 'reception');
-    -- Recreate the live state: 0020's policies missing, the 0012 author-only policy present.
+      ('${AUTHOR}', '${HOTEL}', 'Grettel', 'reception'), ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'), ('${OUTSIDER}', '${OTHER_HOTEL}', 'Outsider', 'reception'), ('${HOUSEKEEPER}', '${HOTEL}', 'Marcos', 'housekeeping');
+    -- Recreate the live state: shift_events_write is the ONLY policy (no select/insert/update), no identity trigger.
+    drop policy if exists shift_events_select on public.shift_events;
     drop policy if exists shift_events_insert on public.shift_events;
     drop policy if exists shift_events_update on public.shift_events;
+    drop trigger if exists shift_events_preserve_identity on public.shift_events;
     create policy shift_events_write on public.shift_events for all to authenticated
       using (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'))
       with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception') and created_by = auth.uid());
@@ -88,5 +91,20 @@ describe("migration 0024: shift_events policies", () => {
   it("a user from another hotel still cannot edit it", async () => {
     const result = await asUser(OUTSIDER, () => editEvent("open"));
     expect(result.rows).toHaveLength(0);
+  });
+
+  it("incidents stay readable after dropping shift_events_write (select policy recreated), for every role in the hotel", async () => {
+    const read = (userId: string) => asUser(userId, () => db.query(`select id from public.shift_events where id = $1`, [eventId]));
+    expect((await read(RECEPTIONIST)).rows).toHaveLength(1);
+    expect((await read(HOUSEKEEPER)).rows).toHaveLength(1);
+    expect((await read(OUTSIDER)).rows).toHaveLength(0);
+  });
+
+  it("an edit cannot change the incident's author, hotel or date (identity trigger)", async () => {
+    await asUser(RECEPTIONIST, () => db.query(
+      `update public.shift_events set created_by = $1, operation_date = current_date - 7, status = 'open' where id = $2`, [RECEPTIONIST, eventId]
+    ));
+    const row = (await db.query<{ created_by: string; same_day: boolean }>(`select created_by, operation_date = current_date as same_day from public.shift_events where id = $1`, [eventId])).rows[0];
+    expect(row).toEqual({ created_by: AUTHOR, same_day: true });
   });
 });
