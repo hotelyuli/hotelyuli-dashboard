@@ -10,4 +10,4 @@ The owner selected these existing destinations for Tours and Income:
 
 Status: destination URLs supplied; authenticated schema inspection, server write credentials and delivery implementation still pending. The existing tour_bookings, income_entries and google_sheets_outbox records have NOT been removed or sent. Current forms still write there. Do not claim Sheets delivery until a write is verified. Cutover must preserve existing records, reconcile duplicates and map the actual destination columns and tabs. No payment-method field should be collected for a tour sale, because the travel office handles payment.
 
-AI summary generation separately requires server-only OPENAI_API_KEY and OPENAI_MODEL in Vercel. Storage does not depend on AI activation.
+Shift reports are generated from saved records by a deterministic template (no AI, no external API); see docs/shift-report-activation.md.

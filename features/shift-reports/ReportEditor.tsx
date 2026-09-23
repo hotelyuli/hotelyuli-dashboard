@@ -1,14 +1,14 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { generateShiftSummary, saveShiftReport } from "./actions";
+import { generateShiftReport, saveShiftReport } from "./actions";
 import { canClose, type ReportInput } from "./logic";
 import { MessageActions } from "@/features/reports/components/MessageActions";
 import type { Locale } from "@/lib/i18n";
 
 type Event = { id: string; event_time: string; room_area: string | null; description: string; status: string };
-export function ReportEditor({ locale, initial, events, initialText, initialRevision, initiallyClosed, aiReady, storageReady }: {
-  locale: Locale; initial: ReportInput; events: Event[]; initialText: string; initialRevision: number; initiallyClosed: boolean; aiReady: boolean; storageReady: boolean;
+export function ReportEditor({ locale, initial, events, initialText, initialRevision, initiallyClosed, storageReady }: {
+  locale: Locale; initial: ReportInput; events: Event[]; initialText: string; initialRevision: number; initiallyClosed: boolean; storageReady: boolean;
 }) {
   const es = locale === "es";
   const router = useRouter();
@@ -28,17 +28,18 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
   }
   function failure(code: string) {
     const messages: Record<string, [string,string]> = {
-      AI_NOT_CONFIGURED: ["La generación AI aún no está conectada. Puede redactar y guardar el reporte manualmente.","AI generation is not connected yet. You can write and save the report manually."],
       SOURCE_CHANGED: ["Los datos cambiaron. Revise y vuelva a generar el reporte.","Source data changed. Review and regenerate the report."],
       CONFLICT: ["Otro usuario guardó este turno. Copie su texto antes de recargar.","Another user saved this shift. Copy your text before reloading."],
       REVIEW_REQUIRED: ["Complete la revisión y confirme la entrega.","Complete the review and confirm handover."],
       ALREADY_CLOSED: ["Este turno ya está cerrado.","This shift is already closed."]
     };
-    setMessage(messages[code]?.[es ? 0 : 1] ?? (es ? "No se pudo completar la acción. Su texto se mantiene aquí; inténtelo de nuevo." : "Could not complete the action. Your text is still here; please retry."));
+    // Known codes get a friendly sentence; anything else (e.g. "SOURCE_LOAD_FAILED: <db error>") is shown as-is.
+    const known = messages[code]?.[es ? 0 : 1];
+    setMessage(known ?? `${es ? "No se pudo completar la acción; su texto se mantiene aquí." : "Could not complete the action; your text is still here."} (${code})`);
   }
   function generate() {
-    if (text.trim() && !window.confirm(es ? "¿Reemplazar el borrador actual?" : "Replace the current draft?")) return;
-    start(async () => { try { const result = await generateShiftSummary(input); if (!result.ok) return failure(result.error); setText(result.text);setSourceHash(result.sourceHash);setHasGenerated(true);setSourceChanged(false);setDirty(true);setMessage(es ? "Borrador generado. Revise los hechos antes de guardar." : "Draft generated. Review the facts before saving."); } catch { failure("FAILED"); } });
+    if (text.trim() && !window.confirm(es ? "¿Reemplazar el texto actual del reporte? Se perderán las ediciones hechas a mano." : "Replace the current report text? Manual edits to it will be lost.")) return;
+    start(async () => { try { const result = await generateShiftReport(input); if (!result.ok) return failure(result.error); setText(result.text);setSourceHash(result.sourceHash);setHasGenerated(true);setSourceChanged(false);setDirty(true);setMessage(es ? "Reporte generado a partir de los registros. Revíselo antes de guardar." : "Report generated from the saved records. Review it before saving."); } catch (caught) { failure(caught instanceof Error ? caught.message : "FAILED"); } });
   }
   function save(close: boolean) {
     if (close && !window.confirm(es ? "¿Guardar el reporte final y cerrar el turno? El reporte cerrado no se puede editar." : "Save the final report and close this shift? A closed report cannot be edited.")) return;
@@ -61,23 +62,22 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
   ];
   return <div className="report-editor">
     {!storageReady && <p role="alert">{es ? "El almacenamiento de reportes está pendiente de activación. No es posible guardar o cerrar todavía." : "Report storage is awaiting activation. Saving and closing are not available yet."}</p>}
-    {!aiReady && <p role="status">{es ? "La generación AI aún no está activada. Puede preparar el texto manualmente." : "AI generation is not activated yet. You can prepare the text manually."}</p>}
     {closed && <p className="success-message">{es ? "Turno cerrado. Reporte final de solo lectura." : "Shift closed. Final report is read-only."}</p>}
     <fieldset disabled={closed || pending}><legend>{es ? "Información de la recepción" : "Reception notes"}</legend>
       <label>{es ? "Recepcionista" : "Receptionist"}<input value={input.receptionist} maxLength={120} onChange={e=>update({receptionist:e.target.value})} /></label>
-      <h3>{es ? "Seleccione los incidentes de este turno" : "Select this shift's incidents"}</h3>
-      <p>{es ? "Se muestran los incidentes del día; incluya solo los de esta entrega." : "These are the day's incidents; include only those relevant to this handover."}</p>
+      <h3>{es ? "Incidentes incluidos en el reporte" : "Incidents included in the report"}</h3>
+      <p>{es ? "Todos los incidentes del día están incluidos; desmarque los que pertenezcan a otro turno." : "All of the day's incidents are included; untick any that belong to another shift."}</p>
       {events.map(event => <label className="report-check" key={event.id}><input type="checkbox" checked={input.eventIds.includes(event.id)} onChange={e=>update({eventIds:e.target.checked ? [...input.eventIds,event.id] : input.eventIds.filter(id=>id!==event.id)})} /><span><strong>{event.event_time.slice(0,5)} · {event.room_area ?? "—"}</strong><br />{event.description}</span></label>)}
       {!events.length && <p>{es ? "No hay eventos registrados para esta fecha." : "No incidents recorded for this date."}</p>}
-      <label>{es ? "Notas adicionales y entrega" : "Additional notes and handover"}<textarea rows={5} maxLength={6000} value={input.notes} onChange={e=>update({notes:e.target.value})} /></label>
+      <label>{es ? "Notas del turno (español o inglés — se incluyen tal cual en el reporte)" : "Shift notes (Spanish or English — included in the report exactly as written)"}<textarea rows={5} maxLength={6000} value={input.notes} onChange={e=>update({notes:e.target.value})} placeholder={es ? "Ej.: Se entregó la llave extra de la Hab 7 a mantenimiento." : "E.g. Spare key for Room 7 handed to maintenance."} /></label>
       <p>{es ? "Marque solo las acciones que se realizaron." : "Check only actions that were actually completed."}</p>
       {confirmations.map(([key,spanish,english])=><label className="report-check" key={key}><input type="checkbox" checked={input[key]} onChange={e=>update({[key]:e.target.checked})} />{es ? spanish : english}</label>)}
     </fieldset>
-    <div className="report-actions"><button className="primary-button" disabled={closed || pending || !aiReady || !storageReady || !input.receptionist.trim()} onClick={generate}>{pending ? "…" : es ? "Generar resumen con AI" : "Generate AI summary"}</button></div>
+    <div className="report-actions"><button className="primary-button" disabled={closed || pending || !input.receptionist.trim()} onClick={generate}>{pending ? "…" : text.trim() ? (es ? "Actualizar reporte" : "Update report") : (es ? "Generar reporte" : "Generate report")}</button></div>
     <label>{es ? "Reporte en inglés — revise y edite" : "English report — review and edit"}<textarea className="report-text" lang="en" rows={18} maxLength={16000} value={text} readOnly={closed} disabled={pending} onChange={e=>{setText(e.target.value);setDirty(true);}} /></label>
     {sourceChanged && <p role="alert">{es ? "Cambió la información del borrador. Vuelva a generar antes de guardar." : "The draft's source information changed. Regenerate before saving."}</p>}
     <fieldset disabled={closed || pending}><legend>{es ? "Revisión antes del cierre" : "Review before closing"}</legend>{checks.map(([key,spanish,english])=><label className="report-check" key={key}><input type="checkbox" checked={input[key]} onChange={e=>update({[key]:e.target.checked})} />{es ? spanish : english}</label>)}</fieldset>
     <p role="status">{message || (dirty ? (es ? "Cambios sin guardar" : "Unsaved changes") : "")}</p>
-    <div className="report-actions"><button className="secondary-button" disabled={closed || pending || !storageReady || sourceChanged || text.trim().length<20} onClick={()=>save(false)}>{es ? "Guardar borrador" : "Save draft"}</button><button className="primary-button" disabled={closed || pending || !storageReady || sourceChanged || !canClose(input) || text.trim().length<20} onClick={()=>save(true)}>{es ? "Confirmar cierre" : "Confirm close"}</button>{text && <MessageActions text={text} locale={locale} />}</div>
+    <div className="report-actions"><button className="secondary-button" disabled={closed || pending || !storageReady || sourceChanged || text.trim().length<20} onClick={()=>save(false)}>{es ? "Guardar reporte final" : "Save final report"}</button><button className="primary-button" disabled={closed || pending || !storageReady || sourceChanged || !canClose(input) || text.trim().length<20} onClick={()=>save(true)}>{es ? "Confirmar cierre" : "Confirm closing"}</button>{text && <MessageActions text={text} locale={locale} />}</div>
   </div>;
 }

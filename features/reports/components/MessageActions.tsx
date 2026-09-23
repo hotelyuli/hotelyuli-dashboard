@@ -42,7 +42,7 @@ export function MessageActions({ text, locale }: { text: string; locale: Locale 
     <div className="message-actions">
       <button className="secondary-button" type="button" onClick={copy}>{copied ? (es ? "Copiado" : "Copied") : (es ? "Copiar" : "Copy")}</button>
       <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon />WhatsApp</a>
-      <button className="secondary-button" type="button" onClick={printReport}>{es ? "Imprimir" : "Print"}</button>
+      <button className="secondary-button" type="button" onClick={printReport}>{es ? "Imprimir / PDF" : "Print / PDF"}</button>
       {error && <p role="alert">{error}</p>}
     </div>
   );
