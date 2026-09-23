@@ -22,7 +22,14 @@ export function RegisterButton({ kind, locale, defaultBookedBy = "" }: { kind: K
   return <><button className={`primary-button register-trigger register-${kind}`} onClick={() => setOpen(true)}><Icon size={17} aria-hidden="true" />{label}</button>{open && <RegisterModal kind={kind} locale={locale} label={label} defaultBookedBy={defaultBookedBy} onClose={() => setOpen(false)} />}</>;
 }
 
-function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind: Kind; locale: Locale; label: string; defaultBookedBy: string; onClose: () => void }) {
+type TourPrefill = { roomNumber?: string; guestName?: string };
+
+/** "Reservar tour" from a Room Board row: the tour form with room + guest pre-filled (guest stays editable). */
+export function TourBookingDialog({ locale, prefill, onClose }: { locale: Locale; prefill: TourPrefill; onClose: () => void }) {
+  return <RegisterModal kind="tour" locale={locale} label={locale === "es" ? "Registrar tour" : "Register tour"} defaultBookedBy="" prefill={prefill} onClose={onClose} />;
+}
+
+function RegisterModal({ kind, locale, label, defaultBookedBy, prefill, onClose }: { kind: Kind; locale: Locale; label: string; defaultBookedBy: string; prefill?: TourPrefill; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -35,8 +42,8 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
   useEffect(()=>{let active=true;getContacts().then(data=>{if(active)setContacts(data);}).catch(()=>{if(active)setContactError(true);});return()=>{active=false;};},[]);
   const [operator, setOperator] = useState<string>(TOUR_OPERATORS[0]);
   const [tourPrice, setTourPrice] = useState("0");
-  const [tourRoom, setTourRoom] = useState("");
-  const [tourGuest, setTourGuest] = useState("");
+  const [tourRoom, setTourRoom] = useState(prefill?.roomNumber ?? "");
+  const [tourGuest, setTourGuest] = useState(prefill?.guestName ?? "");
   const lastAutoGuest = useRef("");
   // Fill the guest from today's board when a room is typed; never overwrite a name the user typed.
   useEffect(() => {

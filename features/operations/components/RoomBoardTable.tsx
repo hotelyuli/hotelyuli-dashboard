@@ -3,7 +3,8 @@ import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { History, MoveRight, Pencil, Repeat } from "lucide-react";
+import { History, MoveRight, Palmtree, Pencil, Repeat } from "lucide-react";
+import { TourBookingDialog } from "@/features/records/components/RegisterForms";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
 import { BED_SETUPS, HOUSEKEEPERS, bedSetupLabel, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
@@ -49,6 +50,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
   const [moving, setMoving] = useState<BoardRow | null>(null);
   const [swapping, setSwapping] = useState<BoardRow | null>(null);
   const [viewingHistory, setViewingHistory] = useState<BoardRow | null>(null);
+  const [bookingTour, setBookingTour] = useState<BoardRow | null>(null);
 
   const statusLabel: Record<BoardRow["operationalStatus"], string> = {
     check_in: t.statusCheckIn,
@@ -113,6 +115,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
                 <td className="notes-cell">{row.notes ?? "—"}</td>
                 <td>
                   <div className="row-actions">
+                    <button className="icon-button subtle" aria-label={locale === "es" ? `Reservar tour · ${row.roomLabel}` : `Book tour · ${row.roomLabel}`} title={locale === "es" ? "Reservar tour" : "Book tour"} onClick={() => setBookingTour(row)}><Palmtree size={15} /></button>
                     <button className="icon-button subtle" aria-label={t.editCell} disabled={!row.rowId} onClick={() => setEditing(row)}><Pencil size={15} /></button>
                     <button className="icon-button subtle" aria-label={t.moveGuest} disabled={!row.rowId} onClick={() => setMoving(row)}><MoveRight size={15} /></button>
                     <button className="icon-button subtle" aria-label={t.swapRooms} disabled={!row.rowId} onClick={() => setSwapping(row)}><Repeat size={15} /></button>
@@ -128,6 +131,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
       {editing && <EditCellModal row={editing} t={t} locale={locale} onClose={() => setEditing(null)} />}
       {moving && <MoveGuestModal row={moving} rooms={rooms} t={t} onClose={() => setMoving(null)} />}
       {swapping && <SwapRoomsModal row={swapping} rooms={rooms} rows={rows} t={t} onClose={() => setSwapping(null)} />}
+      {bookingTour && <TourBookingDialog locale={locale} prefill={{ roomNumber: bookingTour.unitCode, guestName: bookingTour.guestName ?? "" }} onClose={() => setBookingTour(null)} />}
       {viewingHistory && <HistoryModal row={viewingHistory} t={t} locale={locale} onClose={() => setViewingHistory(null)} />}
     </>
   );
