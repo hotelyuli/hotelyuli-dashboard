@@ -322,3 +322,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .income-page .record-summary-card{border-radius:14px;box-shadow:0 3px 9px #35232b04}
 .income-page .record-summary-card>span{display:block;font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .report-editor textarea{font:inherit;font-size:14px;line-height:1.55}
+/* Contacts: edit / delete row under the WhatsApp + call buttons */
+.supplier-manage{display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #efe7e2}
+.supplier-manage .secondary-button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:6px 14px;font-size:12px}
+.supplier-manage .danger-button{color:#8f3b3b;border-color:#efc9c6}
+.supplier-manage .danger-button:hover{background:#f8e4e3}
