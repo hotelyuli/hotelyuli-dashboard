@@ -182,23 +182,30 @@ export async function registerIncome(formData: FormData) {
   revalidatePath("/income"); revalidatePath("/dashboard");
 }
 
-/** Saves a task's status and assignee (tasks.assigned_to). Returns the real error instead of throwing. */
+/**
+ * Saves a task's status from the inline /tasks editor. This writes tasks directly,
+ * so it depends on the tasks UPDATE policy (0025); the incident dialog changes tasks
+ * through the SECURITY DEFINER sync trigger instead. Returns the real error, and
+ * confirms the status the database actually stored.
+ */
 export async function updateTask(formData: FormData): Promise<ActionResult> {
   return runAction("updateTask", async () => {
     const { supabase, profile } = await authorizeWrite();
     const parsed = z.object({
       id: z.string().uuid(),
-      status: z.enum(["open", "in_progress", "completed", "cancelled"]),
-      assignedTo: z.string().trim().max(120)
+      status: z.enum(["open", "in_progress", "completed", "cancelled"])
     }).safeParse(Object.fromEntries(formData.entries()));
     if (!parsed.success) throw new Error(`INVALID_INPUT: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`);
     const { data, error } = await supabase.from("tasks").update({
       status: parsed.data.status,
-      assigned_to: parsed.data.assignedTo || null,
       updated_at: new Date().toISOString()
-    }).eq("id", parsed.data.id).eq("hotel_id", profile.hotel_id).select("id");
-    if (error) throw new Error(`SAVE_FAILED: ${error.message}`);
+    }).eq("id", parsed.data.id).eq("hotel_id", profile.hotel_id).select("id, status");
+    if (error) {
+      const hint = /row-level security/i.test(error.message) ? " (the tasks update policy is missing: run migration 0025)" : "";
+      throw new Error(`SAVE_FAILED: ${error.message}${hint}`);
+    }
     if (!data?.length) throw new Error("NOT_UPDATED: the task was not found or you are not allowed to edit it");
+    if (data[0].status !== parsed.data.status) throw new Error(`NOT_PERSISTED: the database kept status "${data[0].status}"`);
     revalidatePath("/tasks");
     revalidatePath("/dashboard");
   });

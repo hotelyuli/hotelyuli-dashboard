@@ -7,9 +7,12 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * Runs every migration, then performs the exact update updateTask() sends, as a
- * reception user with row-level security enforced (role "authenticated"), on a
- * task created by someone else. Proves the database side of "assign a task".
+ * Reproduces the live /tasks bug: 0014/0020's task policies never applied, so the
+ * only write policy is 0012's tasks_write (ALL, check created_by = auth.uid()).
+ * The inline Save (updateTask) updates tasks directly and is rejected for tasks
+ * created by someone else - while the incident dialog works because the sync
+ * trigger is SECURITY DEFINER. Then applies 0025 and runs updateTask's exact
+ * status-only update with RLS enforced.
  */
 const MIGRATIONS_DIR = path.resolve(__dirname, "../../supabase/migrations");
 const HOTEL = "11111111-1111-4111-8111-111111111111";
@@ -24,19 +27,23 @@ beforeAll(async () => {
   db = await PGlite.create({ extensions: { citext, pgcrypto } });
   await db.exec(`create role authenticated; create schema auth; create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;`);
-  for (const file of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(".sql")).sort()) {
+  for (const file of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(".sql") && name < "0025").sort()) {
     await db.exec(fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8"));
   }
   await db.exec(`
     grant usage on schema public, auth to authenticated;
-    grant select, insert, update on all tables in schema public to authenticated;
+    grant select, insert, update, delete on all tables in schema public to authenticated;
     grant execute on all functions in schema auth to authenticated;
     insert into public.hotels (id, name, slug) values ('${HOTEL}', 'Hotel Yuli', 'hotel-yuli'), ('${OTHER_HOTEL}', 'Other', 'other');
     insert into auth.users (id) values ('${CREATOR}'), ('${RECEPTIONIST}'), ('${OUTSIDER}');
     insert into public.profiles (id, hotel_id, full_name, role) values
-      ('${CREATOR}', '${HOTEL}', 'Grettel', 'reception'),
-      ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'),
-      ('${OUTSIDER}', '${OTHER_HOTEL}', 'Outsider', 'reception');
+      ('${CREATOR}', '${HOTEL}', 'Grettel', 'reception'), ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'), ('${OUTSIDER}', '${OTHER_HOTEL}', 'Outsider', 'reception');
+    -- Recreate the live state: only 0012's policies on tasks.
+    drop policy if exists tasks_insert on public.tasks;
+    drop policy if exists tasks_update on public.tasks;
+    create policy tasks_write on public.tasks for all to authenticated
+      using (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'))
+      with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception') and created_by = auth.uid());
   `);
   taskId = (await db.query<{ id: string }>(
     `insert into public.tasks (hotel_id, operation_date, title, priority, status, created_by) values ($1, current_date, 'Fix AC', 'high', 'open', $2) returning id`,
@@ -51,26 +58,42 @@ async function asUser<T>(userId: string, run: () => Promise<T>): Promise<T> {
   try { return await run(); } finally { await db.exec(`reset role;`); }
 }
 
-const updateTaskSql = (status: string, assignedTo: string | null, hotel = HOTEL) => db.query<{ id: string }>(
-  `update public.tasks set status = $1, assigned_to = $2, updated_at = now() where id = $3 and hotel_id = $4 returning id`,
-  [status, assignedTo, taskId, hotel]
+// The exact statement updateTask() sends (status only, returning the saved status).
+const updateTaskSql = (status: string, hotel = HOTEL) => db.query<{ id: string; status: string }>(
+  `update public.tasks set status = $1, updated_at = now() where id = $2 and hotel_id = $3 returning id, status`,
+  [status, taskId, hotel]
 );
+const savedStatus = async () => (await db.query<{ status: string }>(`select status from public.tasks where id = $1`, [taskId])).rows[0].status;
 
-describe("updateTask at the database level (RLS enforced)", () => {
-  it("a receptionist can assign and change status on a task someone else created, and it persists", async () => {
-    const result = await asUser(RECEPTIONIST, () => updateTaskSql("in_progress", "Marcos"));
-    expect(result.rows).toHaveLength(1);
-    const row = (await db.query<{ status: string; assigned_to: string; created_by: string }>(`select status, assigned_to, created_by from public.tasks where id = $1`, [taskId])).rows[0];
-    expect(row).toEqual({ status: "in_progress", assigned_to: "Marcos", created_by: CREATOR });
+describe("inline task Save vs RLS (migration 0025)", () => {
+  it("reproduces the live bug: another receptionist's inline status save is rejected and nothing persists", async () => {
+    await expect(asUser(RECEPTIONIST, () => updateTaskSql("in_progress"))).rejects.toThrow(/row-level security policy for table "tasks"/);
+    expect(await savedStatus()).toBe("open");
   });
 
-  it("clearing the assignee persists as null", async () => {
-    await asUser(RECEPTIONIST, () => updateTaskSql("in_progress", null));
-    expect((await db.query<{ assigned_to: string | null }>(`select assigned_to from public.tasks where id = $1`, [taskId])).rows[0].assigned_to).toBeNull();
+  it("after 0025 the inline status save persists for any reception user; the author is kept", async () => {
+    const migration = fs.readFileSync(path.join(MIGRATIONS_DIR, "0025_tasks_policies.sql"), "utf8");
+    await db.exec(migration);
+    await db.exec(migration); // re-run is safe
+    const result = await asUser(RECEPTIONIST, () => updateTaskSql("in_progress"));
+    expect(result.rows).toEqual([{ id: taskId, status: "in_progress" }]);
+    expect(await savedStatus()).toBe("in_progress");
+    expect((await db.query<{ created_by: string }>(`select created_by from public.tasks where id = $1`, [taskId])).rows[0].created_by).toBe(CREATOR);
   });
 
-  it("a user from another hotel updates nothing (RLS), which the action reports as a failure", async () => {
-    const result = await asUser(OUTSIDER, () => updateTaskSql("completed", "Hacker", HOTEL));
-    expect(result.rows).toHaveLength(0);
+  it("leaves select + insert + update only (no deletes) and tasks stay readable", async () => {
+    const policies = (await db.query<{ policyname: string; cmd: string }>(`select policyname, cmd from pg_policies where tablename = 'tasks' order by policyname`)).rows;
+    expect(policies).toEqual([
+      { policyname: "tasks_insert", cmd: "INSERT" },
+      { policyname: "tasks_select", cmd: "SELECT" },
+      { policyname: "tasks_update", cmd: "UPDATE" }
+    ]);
+    expect((await asUser(RECEPTIONIST, () => db.query(`select id from public.tasks where id = $1`, [taskId]))).rows).toHaveLength(1);
+    expect((await asUser(RECEPTIONIST, () => db.query(`delete from public.tasks where id = $1 returning id`, [taskId]))).rows).toHaveLength(0);
+  });
+
+  it("a user from another hotel updates nothing", async () => {
+    expect((await asUser(OUTSIDER, () => updateTaskSql("completed", HOTEL))).rows).toHaveLength(0);
+    expect(await savedStatus()).toBe("in_progress");
   });
 });

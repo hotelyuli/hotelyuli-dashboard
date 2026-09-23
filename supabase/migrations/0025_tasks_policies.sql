@@ -1,0 +1,23 @@
+begin;
+drop policy if exists tasks_write on public.tasks;
+drop policy if exists tasks_select on public.tasks;
+drop policy if exists tasks_insert on public.tasks;
+drop policy if exists tasks_update on public.tasks;
+drop policy if exists tasks_delete on public.tasks;
+create policy tasks_select on public.tasks for select to authenticated
+using (hotel_id = public.current_hotel_id());
+create policy tasks_insert on public.tasks for insert to authenticated
+with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception') and created_by = auth.uid());
+create policy tasks_update on public.tasks for update to authenticated
+using (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'))
+with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'));
+create or replace function public.preserve_task_creator() returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.created_by := old.created_by;
+  return new;
+end;
+$$;
+drop trigger if exists tasks_preserve_creator on public.tasks;
+create trigger tasks_preserve_creator before update on public.tasks
+for each row execute function public.preserve_task_creator();
+commit;
