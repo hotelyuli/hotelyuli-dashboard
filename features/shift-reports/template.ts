@@ -25,6 +25,8 @@ export type ReportFacts = {
   income: { time: string; category: string; guest: string; room: string | null; amount: number; currency: "USD" | "CRC"; method: string; paid: boolean; entryType: "payment" | "reversal"; reason: string | null }[];
   openTasks: { title: string; roomArea: string | null; status: string; assignedTo: string | null; carriedOver: boolean }[];
   confirmations: { breakfastSent: boolean; arrivalsContacted: boolean; takeawayReady: boolean };
+  /** A breakfast report was saved in YuliOS for this date (report_snapshots), independent of the checkbox. */
+  breakfastReportSaved: boolean;
   notes: string;
 };
 
@@ -99,6 +101,7 @@ export function buildShiftReport(facts: ReportFacts): string {
     guest.push(`Takeaway breakfasts prepared: ${confirmed(facts.confirmations.takeawayReady)}.`);
   }
   guest.push(`Breakfast report sent: ${confirmed(facts.confirmations.breakfastSent)}.`);
+  guest.push(`Breakfast report saved in YuliOS: ${facts.breakfastReportSaved ? "yes" : "no"}.`);
   section("Guest Service", guest);
 
   section("Maintenance", incidentsIn(facts, "maintenance"));

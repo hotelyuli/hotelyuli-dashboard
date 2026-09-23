@@ -1,6 +1,20 @@
 # Shift reports
 
-Report storage lives in `shift_reports` (migration 0015). No AI or external API is used.
+Report storage lives in `shift_reports` (migration 0015).
+
+## Hybrid generation (Claude + facts)
+
+**Generar / Actualizar reporte** collects the shift facts from saved records (incidents, tours,
+income, check-ins/outs, breakfast confirmations and whether a breakfast report was saved) plus the
+receptionist notes (Spanish or English). If `ANTHROPIC_API_KEY` is set (server-only, Vercel env),
+Claude (`claude-opus-5` by default, override with `ANTHROPIC_MODEL`, low effort) weaves them into
+one warm English narrative (`features/shift-reports/ai.ts`). The instructions forbid adding any
+guest, feedback or fact not in the input; notes are treated as data. The app fixes the title and
+the "Pura Vida, {name}" sign-off itself. Without a key, or if the call fails, the structured
+report below is generated instead and the screen says why. Guest names and notes are sent to
+the Anthropic API when AI is enabled.
+
+## Structured report (fallback)
 
 ## How the report is produced
 

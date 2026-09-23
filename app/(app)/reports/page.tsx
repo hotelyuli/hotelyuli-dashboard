@@ -5,6 +5,8 @@ import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { ReportEditor } from "@/features/shift-reports/ReportEditor";
 import { reportInput, type ReportInput } from "@/features/shift-reports/logic";
 import type { Locale } from "@/lib/i18n";
+// Server actions on this page may call Claude (up to ~45s, then fall back to the structured report).
+export const maxDuration = 60;
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{date?:string;shift?:string}> }) {
   const query = await searchParams;
   const cookieStore = await cookies();

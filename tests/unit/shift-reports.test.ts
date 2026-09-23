@@ -25,7 +25,7 @@ describe("shift close", () => {
 const empty: ReportFacts = {
   date: "2026-09-23", shift: "morning", receptionist: "Grettel",
   incidents: [], arrivals: [], departures: [], takeawayBreakfasts: [], tours: [], income: [], openTasks: [],
-  confirmations: { breakfastSent: false, arrivalsContacted: false, takeawayReady: false }, notes: ""
+  confirmations: { breakfastSent: false, arrivalsContacted: false, takeawayReady: false }, breakfastReportSaved: false, notes: ""
 };
 
 const incident = (category: string, overrides: Partial<ReportFacts["incidents"][number]> = {}): ReportFacts["incidents"][number] => ({

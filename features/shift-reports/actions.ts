@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { reportInput, canClose, type ReportInput } from "./logic";
-import { buildShiftReport, unitLabel, type ReportFacts } from "./template";
+import { unitLabel, type ReportFacts } from "./template";
+import { composeShiftReport } from "./ai";
 import { formatInTimeZone } from "date-fns-tz";
 import type { Json } from "@/lib/db/database.types";
 
@@ -14,16 +15,17 @@ async function context(input: ReportInput) {
   const { data: profile } = await supabase.from("profiles").select("hotel_id,role,active").eq("id", user.id).single();
   if (!profile?.active || !can(profile.role as AppRole, "operations:write")) throw new Error("NOT_AUTHORIZED");
   const hotel = profile.hotel_id;
-  const [rooms, events, openTasks, operations, departures, income, tours] = await Promise.all([
+  const [rooms, events, openTasks, operations, departures, income, tours, breakfastReports] = await Promise.all([
     supabase.from("rooms").select("id,unit_code").eq("hotel_id", hotel),
     supabase.from("shift_events").select("id,event_time,category,room_area,description,action_taken,status,priority").eq("hotel_id", hotel).eq("operation_date", input.date).order("event_time").order("id"),
     supabase.from("tasks").select("id,title,room_area,status,assigned_to,operation_date").eq("hotel_id", hotel).in("status", ["open", "in_progress"]).order("created_at").order("id"),
     supabase.from("daily_operations").select("room_id,guest_name,total_pax,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
     supabase.from("reservations").select("id,room_id,guest_name").eq("hotel_id", hotel).eq("departure_date", input.date).order("id"),
     supabase.from("income_entries").select("id,created_at,category,guest_name,room_number,amount,currency,payment_method,paid,entry_type,reason").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
-    supabase.from("tour_bookings").select("id,guest_name,room_number,tour_name,tour_date,operator_name,adults,children,status,commission_amount,currency").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id")
+    supabase.from("tour_bookings").select("id,guest_name,room_number,tour_name,tour_date,operator_name,adults,children,status,commission_amount,currency").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
+    supabase.from("report_snapshots").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("operation_date", input.date).eq("report_kind", "breakfast")
   ]);
-  const failed = [rooms, events, openTasks, operations, departures, income, tours].find((result) => result.error);
+  const failed = [rooms, events, openTasks, operations, departures, income, tours, breakfastReports].find((result) => result.error);
   if (failed?.error) throw new Error(`SOURCE_LOAD_FAILED: ${failed.error.message}`);
   if ((openTasks.data?.length ?? 0) > 200 || (events.data?.length ?? 0) >= 1000) throw new Error("SOURCE_TOO_LARGE");
 
@@ -55,6 +57,7 @@ async function context(input: ReportInput) {
     income: (income.data ?? []).map((entry) => ({ time: formatInTimeZone(new Date(entry.created_at), "America/Costa_Rica", "HH:mm"), category: entry.category, guest: entry.guest_name, room: entry.room_number, amount: Number(entry.amount), currency: entry.currency, method: entry.payment_method, paid: entry.paid, entryType: entry.entry_type, reason: entry.reason })),
     openTasks: (openTasks.data ?? []).map((task) => ({ title: task.title, roomArea: task.room_area, status: task.status, assignedTo: task.assigned_to, carriedOver: task.operation_date < input.date })),
     confirmations: { breakfastSent: input.breakfastSent, arrivalsContacted: input.arrivalsContacted, takeawayReady: input.takeawayReady },
+    breakfastReportSaved: (breakfastReports.count ?? 0) > 0,
     notes: input.notes
   };
   return { supabase, user, hotel, source, sourceHash: createHash("sha256").update(JSON.stringify(source)).digest("hex") };
@@ -67,7 +70,11 @@ function publicError(error: unknown) {
   console.error("[shift-reports] unexpected error", error);
   return `SAVE_FAILED: ${message}`;
 }
-/** Builds the structured English report from saved facts. No AI, no external API. */
+/**
+ * Builds the English report from saved facts + the receptionist's notes: Claude writes the
+ * narrative when ANTHROPIC_API_KEY is set, otherwise (or on any AI failure) the structured
+ * report is returned, so generating never fails.
+ */
 export async function generateShiftReport(raw: ReportInput) {
   try {
     const input = reportInput.parse(raw);
@@ -75,7 +82,8 @@ export async function generateShiftReport(raw: ReportInput) {
     const { data, error } = await supabase.from("shift_reports").select("status").eq("hotel_id",hotel).eq("operation_date",input.date).eq("shift",input.shift).maybeSingle();
     if (error) throw new Error(`SOURCE_LOAD_FAILED: ${error.message}`);
     if (data?.status === "closed") throw new Error("ALREADY_CLOSED");
-    return { ok: true as const, text: buildShiftReport(source), sourceHash };
+    const report = await composeShiftReport(source);
+    return { ok: true as const, text: report.text, sourceHash, generator: report.generator, model: report.model, warning: report.warning };
   } catch (e) { return { ok: false as const, error: publicError(e) }; }
 }
 export async function saveShiftReport(raw: ReportInput, text: string, revision: number, close: boolean, sourceHash: string | null) {
