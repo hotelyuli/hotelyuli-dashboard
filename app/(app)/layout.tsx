@@ -9,6 +9,7 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { formatInTimeZone } from "date-fns-tz";
 import { TeamHeader } from "@/features/staff/components/TeamHeader";
 import { MainNav } from "@/components/MainNav";
+import { DEFAULT_TEAM } from "@/features/staff/receptionists";
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { supabase } = await requireSession();
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   ];
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const { data: assignment } = await supabase.from("daily_staff_assignments").select("morning_receptionist, afternoon_receptionist, security_guard").eq("operation_date", operationDate).maybeSingle();
-  const todaysAssignment = assignment ?? { morning_receptionist: "Grettel", afternoon_receptionist: "Rebeca", security_guard: "Yei Hernandez" };
+  const todaysAssignment = assignment ?? DEFAULT_TEAM;
   return (
     <div className="app-shell">
       <header className="topbar">

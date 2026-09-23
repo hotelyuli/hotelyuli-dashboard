@@ -5,6 +5,7 @@ import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { ReportEditor } from "@/features/shift-reports/ReportEditor";
 import { reportInput, type ReportInput } from "@/features/shift-reports/logic";
 import type { Locale } from "@/lib/i18n";
+import { onShiftReceptionist } from "@/features/staff/receptionists";
 // Server actions on this page may call Claude (up to ~45s, then fall back to the structured report).
 export const maxDuration = 60;
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{date?:string;shift?:string}> }) {
@@ -28,7 +29,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if(events.error) throw new Error("EVENTS_LOAD_FAILED");
   const saved = report.data;
   const parsed = reportInput.safeParse(saved?.inputs);
-  const initial: ReportInput = parsed.success ? parsed.data : {date,shift,receptionist:(shift === "morning" ? assignment.data?.morning_receptionist : shift === "afternoon" ? assignment.data?.afternoon_receptionist : null) ?? profile.full_name ?? "",eventIds:(events.data ?? []).map(event => event.id),notes:"",breakfastSent:false,arrivalsContacted:false,takeawayReady:false,eventsReviewed:false,tasksReviewed:false,breakfastReviewed:false,incomeReviewed:false,cashReviewed:false,handover:false};
+  const initial: ReportInput = parsed.success ? parsed.data : {date,shift,receptionist:onShiftReceptionist(shift, assignment.data ?? null, profile.full_name ?? ""),eventIds:(events.data ?? []).map(event => event.id),notes:"",breakfastSent:false,arrivalsContacted:false,takeawayReady:false,eventsReviewed:false,tasksReviewed:false,breakfastReviewed:false,incomeReviewed:false,cashReviewed:false,handover:false};
   return <main className="dashboard-page reports-page"><div className="page-heading"><div><p className="eyebrow">{es ? "ENTREGA DE TURNO" : "SHIFT HANDOVER"}</p><h1>{es ? "Cierre y reporte" : "Shift report & close"}</h1><p>{es ? "Revise los hechos, edite el reporte en inglés y confirme la entrega." : "Review the facts, edit the English report and confirm handover."}</p></div></div>
     <form className="report-selector" action="/reports"><label>{es ? "Fecha" : "Date"}<input name="date" type="date" defaultValue={date} required /></label><label>{es ? "Turno" : "Shift"}<select name="shift" defaultValue={shift}><option value="morning">{es ? "Mañana" : "Morning"}</option><option value="afternoon">{es ? "Tarde" : "Afternoon"}</option><option value="night">{es ? "Noche" : "Night"}</option></select></label><button className="secondary-button">{es ? "Abrir reporte" : "Open report"}</button></form>
     <ReportEditor key={`${date}-${shift}`} locale={locale} initial={initial} events={events.data ?? []} initialText={saved?.final_report_en ?? ""} initialRevision={saved?.revision ?? 0} initiallyClosed={saved?.status === "closed"} storageReady={!report.error} />

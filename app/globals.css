@@ -284,3 +284,41 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .task-editor-footer .secondary-button{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:5px 12px;font-size:12px}
 .task-saved{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:650;color:var(--success)}
 .task-editor .form-error{margin:0;font-size:12px}
+/* Badges: priority + status pills (Hotel Yuli palette; scoped so sidebar priority-* borders are unaffected) */
+.priority-badge,.state-pill{display:inline-flex;align-items:center;width:fit-content;padding:3px 9px;border-radius:999px;border:1px solid transparent;font-size:11px;font-weight:650;white-space:nowrap}
+.priority-badge.priority-low{background:#e6eee7;color:#4f6b53;border-color:#cfdcd1}
+.priority-badge.priority-medium{background:#fbefd9;color:#8a5a12;border-color:#f0dcb4}
+.priority-badge.priority-high{background:#f8e4e3;color:#8f3b3b;border-color:#efc9c6}
+.priority-badge.priority-urgent{background:#f1d2d0;color:#7a2b2b;border-color:#e6b3af;font-weight:750}
+.state-pill.state-open,.state-pill.state-follow_up{background:var(--blush);color:#853a3a;border-color:#e6d6cf}
+.state-pill.state-in_progress,.state-pill.state-temporary_solution{background:#fbefd9;color:#8a5a12;border-color:#f0dcb4}
+.state-pill.state-completed{background:#e6eee7;color:#4f6b53;border-color:#cfdcd1}
+.state-pill.state-cancelled{background:#f2efec;color:var(--muted);border-color:var(--line)}
+/* Shift report: Reception notes / review blocks as Hotel Yuli cards */
+.report-editor{border-radius:16px;padding:24px 26px;box-shadow:0 3px 9px #35232b04}
+.report-editor fieldset{display:grid;gap:14px;margin:0 0 18px;padding:18px 20px 20px;border:1px solid var(--line);border-radius:14px;background:var(--cream)}
+.report-editor legend{padding:0 8px;font:600 1.25rem var(--font-display),serif;color:var(--ink)}
+.report-editor fieldset>label{font-weight:600;color:var(--ink)}
+.report-editor select{width:min(340px,100%);min-height:42px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:white;color:var(--ink);font-size:14px;font-weight:500}
+.report-editor input:not([type=checkbox]),.report-editor textarea{border-radius:10px;font-weight:400}
+.report-editor select:focus,.report-editor textarea:focus,.report-editor input:not([type=checkbox]):focus{outline:none;border-color:var(--terracotta);box-shadow:0 0 0 3px #c97b7722}
+.report-subhead h3{margin:0;font:600 1.05rem var(--font-display),serif}
+.report-subhead p,.report-editor .report-hint{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.report-check-list{display:grid;gap:8px}
+.report-editor .report-check{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:white;font-size:13.5px;font-weight:400;color:var(--ink);cursor:pointer}
+.report-editor .report-check:has(input:checked){border-color:#e3b9b5;background:#fdf6f4}
+.report-editor .report-check strong{font-weight:650}
+.report-check-list.compact .report-check{padding:8px 12px}
+/* Housekeeping cards */
+.housekeeping-card{display:flex;flex-direction:column;gap:.65rem;padding:1.1rem 1.1rem 1rem;border-radius:16px;box-shadow:0 3px 9px #35232b04}
+.hk-category{display:inline-flex;width:fit-content;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}
+.hk-priority{background:#f8e4e3;color:#8f3b3b}
+.hk-vacant_after_departure{background:#fbefd9;color:#8a5a12}
+.hk-remains_occupied{background:#e6eee7;color:#4f6b53}
+.hk-none{background:#f2efec;color:var(--muted)}
+.housekeeping-card .cleaning-controls{margin-top:auto;padding-top:.75rem;border-top:1px solid var(--line)}
+/* Daily income */
+.income-page .record-summary-grid{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:1.5rem 0}
+.income-page .record-summary-card{border-radius:14px;box-shadow:0 3px 9px #35232b04}
+.income-page .record-summary-card>span{display:block;font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.report-editor textarea{font:inherit;font-size:14px;line-height:1.55}
