@@ -83,9 +83,15 @@ describe("incident -> task trigger (migration 0020)", () => {
     expect(tasks[0]).toMatchObject({ status: "open", title: "AC leaking" });
   });
 
-  it("a completed incident creates no task unless follow-up is flagged", async () => {
+  it("a completed incident never creates a task, even with follow-up flagged (0021 rule)", async () => {
     expect(await tasksFor((await insertEvent("completed"))!)).toHaveLength(0);
-    expect(await tasksFor((await insertEvent("completed", { requiresFollowUp: true }))!)).toHaveLength(1);
+    expect(await tasksFor((await insertEvent("completed", { requiresFollowUp: true }))!)).toHaveLength(0);
+  });
+
+  it.each(["open", "follow_up", "temporary_solution"])("a %s incident creates one open task", async (status) => {
+    const tasks = await tasksFor((await insertEvent(status))!);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].status).toBe("open");
   });
 
   it("re-saving the same incident (retry with the same id) never duplicates incident or task", async () => {
@@ -146,13 +152,28 @@ describe("incident -> task trigger (migration 0020)", () => {
     expect(tasks[0].status).toBe("open");
   });
 
-  it("re-running 0020 is safe and backfills a task for an incident that is missing one", async () => {
-    const id = await insertEvent("follow_up");
-    await db.query(`delete from public.tasks where source_event_id = $1`, [id]);
-    await db.exec(fs.readFileSync(path.join(MIGRATIONS_DIR, "0020_incident_task_sync.sql"), "utf8"));
-    expect(await tasksFor(id!)).toHaveLength(1);
-    await db.exec(fs.readFileSync(path.join(MIGRATIONS_DIR, "0020_incident_task_sync.sql"), "utf8"));
-    expect(await tasksFor(id!)).toHaveLength(1);
+  it("0021 repairs a live DB without the trigger: backfills missing tasks, closes tasks of completed incidents, re-run is safe", async () => {
+    const repair = fs.readFileSync(path.join(MIGRATIONS_DIR, "0021_incident_task_repair.sql"), "utf8");
+    // Simulate the broken live state: trigger missing, incidents saved without tasks.
+    await db.exec(`drop trigger shift_events_sync_task on public.shift_events;`);
+    const followUp = await insertEvent("follow_up");
+    const open = await insertEvent("open");
+    const done = await insertEvent("completed");
+    await db.query(
+      `insert into public.tasks (hotel_id, operation_date, source_event_id, title, priority, status, created_by) values ($1, current_date, $2, 'wrongly open', 'low', 'open', $3)`,
+      [HOTEL, done, AUTHOR]
+    );
+    expect(await tasksFor(followUp!)).toHaveLength(0);
+
+    await db.exec(repair);
+    expect((await tasksFor(followUp!)).map((t) => t.status)).toEqual(["open"]);
+    expect((await tasksFor(open!)).map((t) => t.status)).toEqual(["open"]);
+    expect((await tasksFor(done!)).map((t) => t.status)).toEqual(["completed"]);
+
+    await db.exec(repair);
+    expect(await tasksFor(followUp!)).toHaveLength(1);
+    // The trigger is back: a new follow-up incident gets its task immediately.
+    expect(await tasksFor((await insertEvent("follow_up"))!)).toHaveLength(1);
   });
 
   it("an incident keeps its author and hotel when someone else edits it", async () => {
