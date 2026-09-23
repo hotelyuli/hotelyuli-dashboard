@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { History, MoveRight, Pencil, Repeat } from "lucide-react";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
-import { HOUSEKEEPERS, bedSetupLabel, supportsBedSetup } from "@/features/operations/logic/room-setup";
+import { BED_SETUPS, HOUSEKEEPERS, bedSetupLabel, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 
 export type BoardRow = {
   rowId: string | null;
@@ -34,7 +34,7 @@ export type BoardRow = {
   sameDayArrival: boolean;
   unitCode: string;
   housekeeper: string | null;
-  bedSetup: "king" | "two_twin" | null;
+  bedSetup: BedSetup | null;
   /** "HH:MM" (Postgres time trimmed to minutes) or null. */
   breakfastToGoTime: string | null;
 };
@@ -125,7 +125,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
         </table>
       </div>
 
-      {editing && <EditCellModal row={editing} t={t} onClose={() => setEditing(null)} />}
+      {editing && <EditCellModal row={editing} t={t} locale={locale} onClose={() => setEditing(null)} />}
       {moving && <MoveGuestModal row={moving} rooms={rooms} t={t} onClose={() => setMoving(null)} />}
       {swapping && <SwapRoomsModal row={swapping} rooms={rooms} rows={rows} t={t} onClose={() => setSwapping(null)} />}
       {viewingHistory && <HistoryModal row={viewingHistory} t={t} locale={locale} onClose={() => setViewingHistory(null)} />}
@@ -135,7 +135,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
 
 type Dict = ReturnType<typeof dictionary>;
 
-function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: () => void }) {
+function EditCellModal({ row, t, locale, onClose }: { row: BoardRow; t: Dict; locale: Locale; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -235,8 +235,7 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
           {hasBedSetup && <label>{t.fieldBedSetup}
             <select value={bedSetup} onChange={(e) => setBedSetup(e.target.value as typeof bedSetup)}>
               <option value="">{t.bedSetupUnset}</option>
-              <option value="king">King</option>
-              <option value="two_twin">2 Twin</option>
+              {BED_SETUPS.map((value) => <option key={value} value={value}>{bedSetupLabel(value, locale)}</option>)}
             </select>
           </label>}
           <label>{t.fieldBreakfastNotes}<input value={breakfastNotes} onChange={(e) => setBreakfastNotes(e.target.value)} maxLength={300} /></label>

@@ -23,17 +23,16 @@ export default async function HousekeepingPage() {
   const es = locale === "es";
   const category = { priority: es ? "Prioridad" : "Priority", vacant_after_departure: es ? "Quedan vacías" : "Vacant after departure", remains_occupied: es ? "Permanecen ocupadas" : "Remains occupied" } as const;
   const groups = { priority: [] as string[], vacant_after_departure: [] as string[], remains_occupied: [] as string[] };
-  const bedSetups: string[] = [];
   for (const room of rooms ?? []) {
     const op = opByRoom.get(room.id);
     if (!op) continue;
     const key = op.same_day_arrival ? "priority" : op.housekeeping_category;
-    if (key && key in groups) groups[key as keyof typeof groups].push(room.display_name);
-    // Bed setup for every convertible room with a setup chosen, whatever its cleaning status.
-    if (op.bed_setup && supportsBedSetup(room.unit_code)) bedSetups.push(`${room.display_name} · ${bedSetupLabel(op.bed_setup, locale)}`);
+    // Convertible rooms with a bed setup chosen show it inline: "Habitación 10 · 3 Twin".
+    const label = op.bed_setup && supportsBedSetup(room.unit_code) ? `${room.display_name} · ${bedSetupLabel(op.bed_setup, locale)}` : room.display_name;
+    if (key && key in groups) groups[key as keyof typeof groups].push(label);
   }
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`, ...(bedSetups.length ? ["", `🛏 ${es ? "MONTAJE DE CAMAS" : "BED SETUP"}`, ...bedSetups] : [])].join("\n");
+  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
 
   return (
     <main className="dashboard-page">
