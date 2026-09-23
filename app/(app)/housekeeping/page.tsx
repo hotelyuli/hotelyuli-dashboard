@@ -5,6 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { MessageActions } from "@/features/reports/components/MessageActions";
 import type { Locale } from "@/lib/i18n";
+import { bedSetupLabel, supportsBedSetup } from "@/features/operations/logic/room-setup";
 
 export const metadata = { title: "Housekeeping" };
 
@@ -15,21 +16,24 @@ export default async function HousekeepingPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const [{ data: rooms }, { data: operations }] = await Promise.all([
-    supabase.from("rooms").select("id, display_name, sort_order").eq("hotel_id", hotelId).eq("active", true).order("sort_order", { ascending: true }),
-    supabase.from("daily_operations").select("room_id, operational_status, housekeeping_category, same_day_arrival, notes").eq("hotel_id", hotelId).eq("operation_date", operationDate)
+    supabase.from("rooms").select("id, display_name, sort_order, unit_code").eq("hotel_id", hotelId).eq("active", true).order("sort_order", { ascending: true }),
+    supabase.from("daily_operations").select("room_id, operational_status, housekeeping_category, same_day_arrival, notes, bed_setup").eq("hotel_id", hotelId).eq("operation_date", operationDate)
   ]);
   const opByRoom = new Map((operations ?? []).map((row) => [row.room_id, row]));
   const es = locale === "es";
   const category = { priority: es ? "Prioridad" : "Priority", vacant_after_departure: es ? "Quedan vacías" : "Vacant after departure", remains_occupied: es ? "Permanecen ocupadas" : "Remains occupied" } as const;
   const groups = { priority: [] as string[], vacant_after_departure: [] as string[], remains_occupied: [] as string[] };
+  const bedSetups: string[] = [];
   for (const room of rooms ?? []) {
     const op = opByRoom.get(room.id);
     if (!op) continue;
     const key = op.same_day_arrival ? "priority" : op.housekeeping_category;
     if (key && key in groups) groups[key as keyof typeof groups].push(room.display_name);
+    // Bed setup only for rooms being prepared, and only convertible rooms with a setup chosen.
+    if ((key === "priority" || key === "vacant_after_departure") && op.bed_setup && supportsBedSetup(room.unit_code)) bedSetups.push(`${room.display_name} · ${bedSetupLabel(op.bed_setup, locale)}`);
   }
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
+  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`, ...(bedSetups.length ? ["", `🛏 ${es ? "MONTAJE DE CAMAS" : "BED SETUP"}`, ...bedSetups] : [])].join("\n");
 
   return (
     <main className="dashboard-page">
