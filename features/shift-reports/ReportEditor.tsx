@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { generateShiftReport, saveShiftReport } from "./actions";
 import { canClose, type ReportInput } from "./logic";
 import { MessageActions } from "@/features/reports/components/MessageActions";
+import { RECEPTIONISTS } from "@/features/staff/receptionists";
 import type { Locale } from "@/lib/i18n";
 
 type Event = { id: string; event_time: string; room_area: string | null; description: string; status: string };
@@ -45,6 +46,8 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
     if (close && !window.confirm(es ? "¿Guardar el reporte final y cerrar el turno? El reporte cerrado no se puede editar." : "Save the final report and close this shift? A closed report cannot be edited.")) return;
     start(async () => { try { const result = await saveShiftReport(input,text,revision,close,sourceHash); if (!result.ok) return failure(result.error);setRevision(result.revision);setClosed(result.closed);setDirty(false);setMessage(result.closed ? (es ? "Turno cerrado y reporte guardado." : "Shift closed and report saved.") : (es ? "Borrador guardado." : "Draft saved."));router.refresh(); } catch { failure("FAILED"); } });
   }
+  // Receptionists who can sign; keeps a saved/assigned name that is not in the list.
+  const signers = RECEPTIONISTS.includes(input.receptionist) || !input.receptionist ? RECEPTIONISTS : [...RECEPTIONISTS, input.receptionist];
   const confirmations: [keyof Pick<ReportInput,"breakfastSent"|"arrivalsContacted"|"takeawayReady">,string,string][] = [
     ["breakfastSent","Reporte de desayuno enviado a Aura","Breakfast report sent to Aura"],
     ["arrivalsContacted","Huéspedes de mañana contactados","Tomorrow's arrivals contacted"],
@@ -64,7 +67,7 @@ export function ReportEditor({ locale, initial, events, initialText, initialRevi
     {!storageReady && <p role="alert">{es ? "El almacenamiento de reportes está pendiente de activación. No es posible guardar o cerrar todavía." : "Report storage is awaiting activation. Saving and closing are not available yet."}</p>}
     {closed && <p className="success-message">{es ? "Turno cerrado. Reporte final de solo lectura." : "Shift closed. Final report is read-only."}</p>}
     <fieldset disabled={closed || pending}><legend>{es ? "Información de la recepción" : "Reception notes"}</legend>
-      <label>{es ? "Recepcionista" : "Receptionist"}<input value={input.receptionist} maxLength={120} onChange={e=>update({receptionist:e.target.value})} /></label>
+      <label>{es ? "Firma el reporte (recepcionista de turno)" : "Signed by (receptionist on shift)"}<select value={input.receptionist} onChange={e=>update({receptionist:e.target.value})}>{!input.receptionist && <option value="">{es ? "Elegir recepcionista" : "Choose receptionist"}</option>}{signers.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
       <h3>{es ? "Incidentes incluidos en el reporte" : "Incidents included in the report"}</h3>
       <p>{es ? "Todos los incidentes del día están incluidos; desmarque los que pertenezcan a otro turno." : "All of the day's incidents are included; untick any that belong to another shift."}</p>
       {events.map(event => <label className="report-check" key={event.id}><input type="checkbox" checked={input.eventIds.includes(event.id)} onChange={e=>update({eventIds:e.target.checked ? [...input.eventIds,event.id] : input.eventIds.filter(id=>id!==event.id)})} /><span><strong>{event.event_time.slice(0,5)} · {event.room_area ?? "—"}</strong><br />{event.description}</span></label>)}

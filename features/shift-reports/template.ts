@@ -1,12 +1,15 @@
-// Deterministic English shift report (spec §13), built only from saved facts.
-// No AI: every line below comes from a record or from the receptionist's own
-// notes, which are copied verbatim (Spanish or English).
+// Shift report facts (spec §13, refined with the owner): a concise handover, not a data
+// dump. The facts deliberately carry NO guest names and NO payments (payments are
+// reported separately from the Income module), and only counts for arrivals and
+// departures. The same facts feed Claude (ai.ts) and this non-AI fallback, so neither
+// can mention what is not here.
 
 export type IncidentCategory = "arriving" | "departure" | "guest_request" | "guest_complaint" | "maintenance" | "security" | "other";
 
 export type ReportFacts = {
   date: string;
   shift: "morning" | "afternoon" | "night";
+  /** The receptionist on shift who signs the report. */
   receptionist: string;
   incidents: {
     time: string;
@@ -18,11 +21,12 @@ export type ReportFacts = {
     priority: string;
     task: { status: string; assignedTo: string | null } | null;
   }[];
-  arrivals: { unit: string; guest: string | null; pax: number; sameDayTurnover: boolean }[];
-  departures: { unit: string; guest: string | null }[];
-  takeawayBreakfasts: { unit: string; guest: string | null; pax: number; time: string | null }[];
-  tours: { guest: string; room: string | null; tour: string; tourDate: string; operator: string; pax: number; status: string; commission: number; currency: string }[];
-  income: { time: string; category: string; guest: string; room: string | null; amount: number; currency: "USD" | "CRC"; method: string; paid: boolean; entryType: "payment" | "reversal"; reason: string | null }[];
+  /** Scheduled today from the board/reservations: counts only, no rosters. */
+  arrivals: { count: number; sameDayTurnovers: number };
+  departures: { count: number };
+  takeawayBreakfasts: { unit: string; pax: number; time: string | null }[];
+  /** Brief: no guest names, no prices or commissions. */
+  tours: { room: string | null; tour: string; tourDate: string; operator: string; pax: number; status: string }[];
   openTasks: { title: string; roomArea: string | null; status: string; assignedTo: string | null; carriedOver: boolean }[];
   confirmations: { breakfastSent: boolean; arrivalsContacted: boolean; takeawayReady: boolean };
   /** A breakfast report was saved in YuliOS for this date (report_snapshots), independent of the checkbox. */
@@ -50,12 +54,12 @@ export function unitLabel(unitCode: string): string {
   return bed ? `Dorm bed ${bed[1]}` : `Room ${unitCode}`;
 }
 
-function money(currency: string, amount: number) {
-  return `${currency} ${amount.toFixed(2)}`;
-}
-
 function confirmed(value: boolean) {
   return value ? "confirmed" : "NOT confirmed";
+}
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 function incidentLine(incident: ReportFacts["incidents"][number]) {
@@ -79,17 +83,15 @@ export function reportTitle(shift: ReportFacts["shift"], date: string) {
   return `${label} Shift Report – ${pretty}`;
 }
 
+/** Structured non-AI report from the same facts (used when AI is off or fails). */
 export function buildShiftReport(facts: ReportFacts): string {
-  const lines: string[] = [reportTitle(facts.shift, facts.date), `Receptionist: ${facts.receptionist}`, ""];
+  const lines: string[] = [reportTitle(facts.shift, facts.date), ""];
   const section = (title: string, body: string[]) => { lines.push(title.toUpperCase(), ...(body.length ? body : [NOTHING]), ""); };
 
-  // Arrivals & Departures — board data is the day's plan, not confirmed physical arrivals.
+  // Arrivals & Departures: one summary line, no per-room roster.
   const arrivals: string[] = [];
-  if (facts.arrivals.length) {
-    arrivals.push(`Scheduled check-ins (${facts.arrivals.length}):`, ...facts.arrivals.map((a) => `- ${a.unit} – ${a.guest ?? "guest name not recorded"}${a.pax ? ` (${a.pax} pax)` : ""}${a.sameDayTurnover ? " – same-day turnover, priority cleaning" : ""}`));
-  }
-  if (facts.departures.length) {
-    arrivals.push(`Scheduled check-outs (${facts.departures.length}):`, ...facts.departures.map((d) => `- ${d.unit} – ${d.guest ?? "guest name not recorded"}`));
+  if (facts.arrivals.count || facts.departures.count) {
+    arrivals.push(`Scheduled today: ${plural(facts.arrivals.count, "check-in")}${facts.arrivals.sameDayTurnovers ? ` (${plural(facts.arrivals.sameDayTurnovers, "same-day turnover")})` : ""}, ${plural(facts.departures.count, "check-out")}.`);
   }
   arrivals.push(...incidentsIn(facts, "arrivals"));
   if (arrivals.length) arrivals.push(`Tomorrow's arrivals contacted: ${confirmed(facts.confirmations.arrivalsContacted)}.`);
@@ -97,7 +99,7 @@ export function buildShiftReport(facts: ReportFacts): string {
 
   const guest = [...incidentsIn(facts, "guest")];
   if (facts.takeawayBreakfasts.length) {
-    guest.push(`Takeaway breakfasts (${facts.takeawayBreakfasts.length}):`, ...facts.takeawayBreakfasts.map((t) => `- ${t.unit} – ${t.guest ?? "guest"}${t.pax ? `, ${t.pax} pax` : ""}${t.time ? ` at ${t.time.slice(0, 5)}` : ""}`));
+    guest.push(`Takeaway breakfasts: ${facts.takeawayBreakfasts.map((t) => `${t.unit}${t.pax ? ` (${t.pax} pax)` : ""}${t.time ? ` at ${t.time.slice(0, 5)}` : ""}`).join(", ")}.`);
     guest.push(`Takeaway breakfasts prepared: ${confirmed(facts.confirmations.takeawayReady)}.`);
   }
   guest.push(`Breakfast report sent: ${confirmed(facts.confirmations.breakfastSent)}.`);
@@ -109,22 +111,8 @@ export function buildShiftReport(facts: ReportFacts): string {
   const other = incidentsIn(facts, "other");
   if (other.length) section("Security & Other", other);
 
-  // Tours / Payments / Administration — USD and CRC are never combined.
-  const admin: string[] = [];
-  if (facts.tours.length) {
-    admin.push(`Tours recorded (${facts.tours.length}):`, ...facts.tours.map((t) => `- ${t.tour} on ${t.tourDate} with ${t.operator} – ${t.guest}${t.room ? ` (${t.room})` : ""}, ${t.pax} pax, ${t.status}; hotel commission ${money(t.currency, t.commission)}`));
-  }
-  if (facts.income.length) {
-    const totals = { USD: 0, CRC: 0 };
-    admin.push(`Income recorded (${facts.income.length}):`);
-    for (const entry of [...facts.income].sort((a, b) => a.time.localeCompare(b.time))) {
-      const reversal = entry.entryType === "reversal";
-      if (entry.paid) totals[entry.currency] += reversal ? -entry.amount : entry.amount;
-      admin.push(`- ${entry.time.slice(0, 5)} · ${reversal ? "REVERSAL of " : ""}${entry.category} · ${entry.guest}${entry.room ? ` (${entry.room})` : ""} · ${reversal ? "-" : ""}${money(entry.currency, entry.amount)} · ${entry.method}${entry.paid ? "" : " · unpaid, not counted"}${reversal && entry.reason ? ` · reason: ${entry.reason}` : ""}`);
-    }
-    admin.push(`Settled income: ${money("USD", totals.USD)} | ${money("CRC", totals.CRC)} (currencies kept separate).`);
-  }
-  section("Tours / Payments / Administration", admin);
+  // Tours, brief: no guest names, no money (payments are reported from the Income module).
+  section("Tours", facts.tours.map((t) => `- ${t.tour} on ${t.tourDate} with ${t.operator}${t.room ? ` – ${t.room}` : ""}, ${t.pax} pax (${t.status})`));
 
   section("Open Follow-ups", facts.openTasks.map((task) => `- ${task.title.trim()}${task.roomArea ? ` – ${task.roomArea}` : ""} (${TASK_STATUS[task.status] ?? task.status}${task.assignedTo ? `, assigned to ${task.assignedTo}` : ", unassigned"}${task.carriedOver ? ", pending from an earlier day" : ""})`));
 

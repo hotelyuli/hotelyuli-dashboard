@@ -7,7 +7,6 @@ import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { reportInput, canClose, type ReportInput } from "./logic";
 import { unitLabel, type ReportFacts } from "./template";
 import { composeShiftReport } from "./ai";
-import { formatInTimeZone } from "date-fns-tz";
 import type { Json } from "@/lib/db/database.types";
 
 async function context(input: ReportInput) {
@@ -15,17 +14,16 @@ async function context(input: ReportInput) {
   const { data: profile } = await supabase.from("profiles").select("hotel_id,role,active").eq("id", user.id).single();
   if (!profile?.active || !can(profile.role as AppRole, "operations:write")) throw new Error("NOT_AUTHORIZED");
   const hotel = profile.hotel_id;
-  const [rooms, events, openTasks, operations, departures, income, tours, breakfastReports] = await Promise.all([
+  const [rooms, events, openTasks, operations, departures, tours, breakfastReports] = await Promise.all([
     supabase.from("rooms").select("id,unit_code").eq("hotel_id", hotel),
     supabase.from("shift_events").select("id,event_time,category,room_area,description,action_taken,status,priority").eq("hotel_id", hotel).eq("operation_date", input.date).order("event_time").order("id"),
     supabase.from("tasks").select("id,title,room_area,status,assigned_to,operation_date").eq("hotel_id", hotel).in("status", ["open", "in_progress"]).order("created_at").order("id"),
-    supabase.from("daily_operations").select("room_id,guest_name,total_pax,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
-    supabase.from("reservations").select("id,room_id,guest_name").eq("hotel_id", hotel).eq("departure_date", input.date).order("id"),
-    supabase.from("income_entries").select("id,created_at,category,guest_name,room_number,amount,currency,payment_method,paid,entry_type,reason").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
-    supabase.from("tour_bookings").select("id,guest_name,room_number,tour_name,tour_date,operator_name,adults,children,status,commission_amount,currency").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
+    supabase.from("daily_operations").select("room_id,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
+    supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("departure_date", input.date),
+    supabase.from("tour_bookings").select("id,room_number,tour_name,tour_date,operator_name,adults,children,status").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
     supabase.from("report_snapshots").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("operation_date", input.date).eq("report_kind", "breakfast")
   ]);
-  const failed = [rooms, events, openTasks, operations, departures, income, tours, breakfastReports].find((result) => result.error);
+  const failed = [rooms, events, openTasks, operations, departures, tours, breakfastReports].find((result) => result.error);
   if (failed?.error) throw new Error(`SOURCE_LOAD_FAILED: ${failed.error.message}`);
   if ((openTasks.data?.length ?? 0) > 200 || (events.data?.length ?? 0) >= 1000) throw new Error("SOURCE_TOO_LARGE");
 
@@ -50,11 +48,10 @@ async function context(input: ReportInput) {
       const task = taskByEvent.get(event.id);
       return { time: event.event_time, category: event.category, roomArea: event.room_area, description: event.description, actionTaken: event.action_taken, status: event.status, priority: event.priority, task: task ? { status: task.status, assignedTo: task.assigned_to } : null };
     }),
-    arrivals: byUnit(board.filter((row) => row.operational_status === "check_in")).map((row) => ({ unit: unit(row.room_id), guest: row.guest_name, pax: row.total_pax, sameDayTurnover: row.same_day_arrival })),
-    departures: byUnit(departures.data ?? []).map((row) => ({ unit: unit(row.room_id), guest: row.guest_name })),
-    takeawayBreakfasts: byUnit(board.filter((row) => row.breakfast_status === "included" && row.breakfast_to_go)).map((row) => ({ unit: unit(row.room_id), guest: row.guest_name, pax: row.breakfast_pax, time: row.breakfast_to_go_time })),
-    tours: (tours.data ?? []).map((tour) => ({ guest: tour.guest_name, room: tour.room_number, tour: tour.tour_name, tourDate: tour.tour_date, operator: tour.operator_name, pax: tour.adults + tour.children, status: tour.status, commission: Number(tour.commission_amount), currency: tour.currency })),
-    income: (income.data ?? []).map((entry) => ({ time: formatInTimeZone(new Date(entry.created_at), "America/Costa_Rica", "HH:mm"), category: entry.category, guest: entry.guest_name, room: entry.room_number, amount: Number(entry.amount), currency: entry.currency, method: entry.payment_method, paid: entry.paid, entryType: entry.entry_type, reason: entry.reason })),
+    arrivals: { count: board.filter((row) => row.operational_status === "check_in").length, sameDayTurnovers: board.filter((row) => row.operational_status === "check_in" && row.same_day_arrival).length },
+    departures: { count: departures.count ?? 0 },
+    takeawayBreakfasts: byUnit(board.filter((row) => row.breakfast_status === "included" && row.breakfast_to_go)).map((row) => ({ unit: unit(row.room_id), pax: row.breakfast_pax, time: row.breakfast_to_go_time })),
+    tours: (tours.data ?? []).map((tour) => ({ room: tour.room_number, tour: tour.tour_name, tourDate: tour.tour_date, operator: tour.operator_name, pax: tour.adults + tour.children, status: tour.status })),
     openTasks: (openTasks.data ?? []).map((task) => ({ title: task.title, roomArea: task.room_area, status: task.status, assignedTo: task.assigned_to, carriedOver: task.operation_date < input.date })),
     confirmations: { breakfastSent: input.breakfastSent, arrivalsContacted: input.arrivalsContacted, takeawayReady: input.takeawayReady },
     breakfastReportSaved: (breakfastReports.count ?? 0) > 0,

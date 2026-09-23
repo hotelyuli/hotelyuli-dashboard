@@ -24,7 +24,7 @@ describe("shift close", () => {
 
 const empty: ReportFacts = {
   date: "2026-09-23", shift: "morning", receptionist: "Grettel",
-  incidents: [], arrivals: [], departures: [], takeawayBreakfasts: [], tours: [], income: [], openTasks: [],
+  incidents: [], arrivals: { count: 0, sameDayTurnovers: 0 }, departures: { count: 0 }, takeawayBreakfasts: [], tours: [], openTasks: [],
   confirmations: { breakfastSent: false, arrivalsContacted: false, takeawayReady: false }, breakfastReportSaved: false, notes: ""
 };
 
@@ -39,14 +39,14 @@ function sectionOf(report: string, heading: string) {
   return rest.slice(0, rest.indexOf("\n\n"));
 }
 
-describe("buildShiftReport (structured, no AI)", () => {
-  it("uses the spec title, all spec sections in order, and the Pura Vida sign-off", () => {
-    const report = buildShiftReport(empty);
-    expect(report.startsWith("Morning Shift Report – Wednesday, 23 September 2026\nReceptionist: Grettel")).toBe(true);
-    const order = ["ARRIVALS & DEPARTURES", "GUEST SERVICE", "MAINTENANCE", "TOURS / PAYMENTS / ADMINISTRATION", "OPEN FOLLOW-UPS"].map((h) => report.indexOf(h));
+describe("buildShiftReport (structured fallback, no AI)", () => {
+  it("starts with the title, keeps the sections in order and signs with the receptionist on shift", () => {
+    const report = buildShiftReport({ ...empty, receptionist: "Rene" });
+    expect(report.startsWith("Morning Shift Report – Wednesday, 23 September 2026\n\nARRIVALS & DEPARTURES")).toBe(true);
+    const order = ["ARRIVALS & DEPARTURES", "GUEST SERVICE", "MAINTENANCE", "TOURS", "OPEN FOLLOW-UPS"].map((h) => report.indexOf(h));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(report.endsWith("Pura Vida,\nGrettel")).toBe(true);
+    expect(report.endsWith("Pura Vida,\nRene")).toBe(true);
     expect(sectionOf(report, "MAINTENANCE")).toBe("- Nothing to report.");
   });
 
@@ -76,45 +76,30 @@ describe("buildShiftReport (structured, no AI)", () => {
   });
 
   it("copies Spanish or English notes verbatim", () => {
-    const notes = "Se entregó la llave extra de la Hab 7 a mantenimiento.\nGuest in Room 2 asked for a late checkout — pendiente de confirmar.";
-    const report = buildShiftReport({ ...empty, notes });
-    expect(sectionOf(report, "RECEPTIONIST NOTES")).toBe(notes);
+    const notes = "Se entregó la llave extra de la Hab 7 a mantenimiento.\nRoom 2 asked for a late checkout — pendiente de confirmar.";
+    expect(sectionOf(buildShiftReport({ ...empty, notes }), "RECEPTIONIST NOTES")).toBe(notes);
   });
 
-  it("lists scheduled check-ins/outs and never claims unconfirmed actions", () => {
+  it("summarises arrivals/departures as counts only (no roster) and never claims unconfirmed actions", () => {
     const report = buildShiftReport({
       ...empty,
-      arrivals: [{ unit: unitLabel("5"), guest: "Ana Pérez", pax: 2, sameDayTurnover: true }],
-      departures: [{ unit: unitLabel("B3"), guest: "John Smith" }],
-      takeawayBreakfasts: [{ unit: "Room 5", guest: "Ana Pérez", pax: 2, time: "06:30:00" }]
+      arrivals: { count: 4, sameDayTurnovers: 1 },
+      departures: { count: 1 },
+      takeawayBreakfasts: [{ unit: unitLabel("5"), pax: 2, time: "06:30:00" }]
     });
     const arrivals = sectionOf(report, "ARRIVALS & DEPARTURES");
-    expect(arrivals).toContain("- Room 5 – Ana Pérez (2 pax) – same-day turnover, priority cleaning");
-    expect(arrivals).toContain("- Dorm bed 3 – John Smith");
-    expect(arrivals).toContain("Tomorrow's arrivals contacted: NOT confirmed.");
+    expect(arrivals).toBe("Scheduled today: 4 check-ins (1 same-day turnover), 1 check-out.\nTomorrow's arrivals contacted: NOT confirmed.");
     const guest = sectionOf(report, "GUEST SERVICE");
-    expect(guest).toContain("- Room 5 – Ana Pérez, 2 pax at 06:30");
+    expect(guest).toContain("Takeaway breakfasts: Room 5 (2 pax) at 06:30.");
     expect(guest).toContain("Takeaway breakfasts prepared: NOT confirmed.");
     expect(guest).toContain("Breakfast report sent: NOT confirmed.");
     expect(buildShiftReport({ ...empty, confirmations: { breakfastSent: true, arrivalsContacted: false, takeawayReady: false } })).toContain("Breakfast report sent: confirmed.");
   });
 
-  it("keeps USD and CRC separate, subtracts reversals and skips unpaid entries in the totals", () => {
-    const report = buildShiftReport({
-      ...empty,
-      tours: [{ guest: "Ana", room: "5", tour: "Whale Watching", tourDate: "2026-09-24", operator: "Ballena Tours", pax: 2, status: "paid", commission: 20, currency: "USD" }],
-      income: [
-        { time: "09:00", category: "Accommodation", guest: "Ana", room: "Habitación 5", amount: 150, currency: "USD", method: "Visa", paid: true, entryType: "payment", reason: null },
-        { time: "09:30", category: "Accommodation", guest: "Ana", room: "Habitación 5", amount: 50, currency: "USD", method: "Visa", paid: true, entryType: "reversal", reason: "Partial refund" },
-        { time: "10:00", category: "Laundry", guest: "Luis", room: null, amount: 5000, currency: "CRC", method: "Cash CRC", paid: true, entryType: "payment", reason: null },
-        { time: "11:00", category: "Restaurant", guest: "Luis", room: null, amount: 30, currency: "USD", method: "Cash USD", paid: false, entryType: "payment", reason: null }
-      ]
-    });
-    const admin = sectionOf(report, "TOURS / PAYMENTS / ADMINISTRATION");
-    expect(admin).toContain("Whale Watching on 2026-09-24 with Ballena Tours – Ana (5), 2 pax, paid; hotel commission USD 20.00");
-    expect(admin).toContain("REVERSAL of Accommodation · Ana (Habitación 5) · -USD 50.00 · Visa · reason: Partial refund");
-    expect(admin).toContain("unpaid, not counted");
-    expect(admin).toContain("Settled income: USD 100.00 | CRC 5000.00 (currencies kept separate).");
+  it("lists tours briefly with no guest names and no money, and has no payments section", () => {
+    const report = buildShiftReport({ ...empty, tours: [{ room: "5", tour: "Whale Watching", tourDate: "2026-09-24", operator: "Ballena Tours", pax: 2, status: "paid" }] });
+    expect(sectionOf(report, "TOURS")).toBe("- Whale Watching on 2026-09-24 with Ballena Tours – 5, 2 pax (paid)");
+    expect(report).not.toMatch(/USD|CRC|income|payment|commission/i);
   });
 
   it("labels carried-over follow-ups as pending, not new", () => {

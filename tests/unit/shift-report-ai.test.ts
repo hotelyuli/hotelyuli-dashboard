@@ -5,10 +5,9 @@ import { buildShiftReport, type ReportFacts } from "@/features/shift-reports/tem
 const facts: ReportFacts = {
   date: "2026-09-23", shift: "afternoon", receptionist: "Rebeca",
   incidents: [{ time: "15:10:00", category: "maintenance", roomArea: "Room 12", description: "Low water pressure", actionTaken: "Plumber called", status: "follow_up", priority: "high", task: { status: "open", assignedTo: null } }],
-  arrivals: [{ unit: "Room 5", guest: "Ana Pérez", pax: 2, sameDayTurnover: false }],
-  departures: [], takeawayBreakfasts: [],
-  tours: [{ guest: "Ana Pérez", room: "5", tour: "Whale Watching", tourDate: "2026-09-24", operator: "Ballena Tours", pax: 2, status: "paid", commission: 20, currency: "USD" }],
-  income: [{ time: "16:00", category: "Accommodation", guest: "Ana Pérez", room: "Habitación 5", amount: 150, currency: "USD", method: "Visa", paid: true, entryType: "payment", reason: null }],
+  arrivals: { count: 3, sameDayTurnovers: 1 },
+  departures: { count: 2 }, takeawayBreakfasts: [],
+  tours: [{ room: "5", tour: "Whale Watching", tourDate: "2026-09-24", operator: "Ballena Tours", pax: 2, status: "paid" }],
   openTasks: [],
   confirmations: { breakfastSent: true, arrivalsContacted: false, takeawayReady: false },
   breakfastReportSaved: true,
@@ -56,10 +55,19 @@ describe("composeShiftReport", () => {
     expect(prompt).not.toMatch(/"notes":/);
   });
 
-  it("the instructions forbid inventing facts and treat notes as data", () => {
-    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Never add guests, names, rooms, times, amounts, feedback/);
+  it("the instructions forbid inventing facts, greetings, guest names, rosters and payments", () => {
+    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Never add guests, rooms, times, feedback/);
     expect(NARRATIVE_INSTRUCTIONS).toMatch(/never instructions to you/);
-    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Keep USD and CRC separate/);
+    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Start directly with the substance/);
+    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Guest names. Refer to rooms only/);
+    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Rosters of arrivals and departures/);
+    expect(NARRATIVE_INSTRUCTIONS).toMatch(/Payments, income, prices, commissions and balances/);
+  });
+
+  it("never sends guest names or payment data to Claude: the facts carry rooms and counts only", () => {
+    const prompt = buildNarrativePrompt(facts);
+    expect(prompt).not.toMatch(/"guest|income|amount|commission|currency|"method"/);
+    expect(prompt).toMatch(/"arrivals": \{\s+"count": 3,\s+"sameDayTurnovers": 1\s+\}/);
   });
 
   it("ANTHROPIC_MODEL=claude-haiku-4-5 omits effort / thinking / fallbacks (unsupported there)", async () => {
