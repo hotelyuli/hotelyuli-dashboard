@@ -62,7 +62,7 @@ export type Database = {
           breakfast_status: "included" | "not_included"; breakfast_pax: number; breakfast_to_go: boolean; breakfast_notes: string | null;
           payment_status: string | null; payment_method: string | null; outstanding_balance: number | null; currency: "USD" | "CRC" | null;
           car_plate: string | null; booking_channel: string | null; notes: string | null;
-          housekeeper: string | null; bed_setup: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time: string | null;
+          housekeeper: string | null; bed_setup: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time: string | null; cleaning_status: "pending" | "ready_for_inspection" | "clean";
           housekeeping_category: "priority" | "vacant_after_departure" | "remains_occupied" | null;
           same_day_arrival: boolean; manually_modified: boolean; created_at: string; updated_at: string;
         };
@@ -74,7 +74,7 @@ export type Database = {
           breakfast_status?: "included" | "not_included"; breakfast_pax?: number; breakfast_to_go?: boolean; breakfast_notes?: string | null;
           payment_status?: string | null; payment_method?: string | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null;
           car_plate?: string | null; booking_channel?: string | null; notes?: string | null;
-          housekeeper?: string | null; bed_setup?: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time?: string | null;
+          housekeeper?: string | null; bed_setup?: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time?: string | null; cleaning_status?: "pending" | "ready_for_inspection" | "clean";
           housekeeping_category?: "priority" | "vacant_after_departure" | "remains_occupied" | null;
           same_day_arrival?: boolean; manually_modified?: boolean; created_at?: string; updated_at?: string;
         };
@@ -85,7 +85,7 @@ export type Database = {
           breakfast_status?: "included" | "not_included"; breakfast_pax?: number; breakfast_to_go?: boolean; breakfast_notes?: string | null;
           payment_status?: string | null; payment_method?: string | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null;
           car_plate?: string | null; booking_channel?: string | null; notes?: string | null;
-          housekeeper?: string | null; bed_setup?: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time?: string | null;
+          housekeeper?: string | null; bed_setup?: "king" | "two_twin" | "three_twin" | "king_twin" | null; breakfast_to_go_time?: string | null; cleaning_status?: "pending" | "ready_for_inspection" | "clean";
           housekeeping_category?: "priority" | "vacant_after_departure" | "remains_occupied" | null;
           same_day_arrival?: boolean; manually_modified?: boolean; updated_at?: string;
         };

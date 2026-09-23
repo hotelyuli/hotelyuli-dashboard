@@ -9,6 +9,7 @@ import { materializeUnit, type ReservationForBoard } from "@/features/operations
 import { BED_SETUPS, HOUSEKEEPERS, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
 import { runAction, type ActionResult } from "@/lib/action-result";
+import { CLEANING_ACTIONS } from "@/features/operations/logic/cleaning";
 
 async function authorizeOperationsWrite() {
   const { supabase, user } = await requireSession();
@@ -122,6 +123,33 @@ async function saveOperationCell(formData: FormData) {
   revalidatePath("/breakfast");
   revalidatePath("/housekeeping");
   revalidatePath("/income");
+}
+
+const cleaningSchema = z.object({ rowId: z.string().uuid(), action: z.enum(["mark_ready", "pass_inspection"]) });
+
+/**
+ * Housekeeping work board: advance a room's cleaning status one step. The update
+ * only matches when the room is still in the expected state, so double clicks or
+ * two people acting at once cannot skip a step. It deliberately does not set
+ * manually_modified, so the board can still be re-materialized from imports.
+ */
+export async function advanceCleaningStatus(formData: FormData): Promise<ActionResult> {
+  return runAction("advanceCleaningStatus", async () => {
+    const { supabase, hotelId } = await authorizeOperationsWrite();
+    const parsed = cleaningSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error("INVALID_INPUT");
+    const step = CLEANING_ACTIONS[parsed.data.action];
+    const { data: updated, error } = await supabase
+      .from("daily_operations")
+      .update({ cleaning_status: step.to, updated_at: new Date().toISOString() })
+      .eq("id", parsed.data.rowId)
+      .eq("hotel_id", hotelId)
+      .eq("cleaning_status", step.from)
+      .select("id");
+    if (error) throw new Error(`SAVE_FAILED: ${error.message}`);
+    if (!updated?.length) throw new Error("STATUS_CHANGED: the room is no longer in that state; the page will refresh");
+    revalidatePath("/housekeeping");
+  });
 }
 
 const moveGuestSchema = z.object({ rowId: z.string().uuid(), targetRoomId: z.string().uuid() });

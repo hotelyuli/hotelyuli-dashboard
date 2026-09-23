@@ -265,3 +265,13 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .occupancy-track{height:12px;border-radius:999px;background:var(--blush);overflow:hidden}
 .occupancy-track span{display:block;height:100%;border-radius:inherit;background:var(--terracotta);transition:width .4s ease}
 @media(max-width:700px){.import-bar-label{width:100%;margin-right:0}.import-bar .import-bar-button{flex:1 1 0;justify-content:center}.occupancy-head p strong,.occupancy-percent{font-size:24px}}
+/* Housekeeping work board */
+.housekeeping-card .housekeeper-line{font-size:13px}
+.housekeeping-card .housekeeper-line strong{color:var(--ink)}
+.cleaning-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:auto}
+.cleaning-tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:10px;font-weight:750;letter-spacing:.1em}
+.cleaning-pending{background:var(--blush);color:#853a3a}
+.cleaning-ready_for_inspection{background:#fbefd9;color:#8a5a12}
+.cleaning-clean{background:#e3eee6;color:var(--success)}
+.cleaning-controls .cleaning-action{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:6px 12px;font-size:12px}
+.cleaning-controls .form-error{width:100%;margin:0;font-size:12px}
