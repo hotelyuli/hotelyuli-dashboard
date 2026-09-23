@@ -45,28 +45,51 @@ const eventSchema = z.object({
   requiresFollowUp: z.enum(["true", "false"]).transform((value) => value === "true")
 });
 
+/**
+ * The incident's follow-up task is created by the shift_events_sync_task trigger
+ * (migration 0020) in the same transaction, so incident and task save together.
+ * The form sends a client-generated id: a retried submit hits the primary key
+ * instead of creating a second incident.
+ */
 export async function registerEvent(formData: FormData) {
   const { supabase, user, profile, operationDate } = await authorizeWrite();
-  const parsed = eventSchema.safeParse(Object.fromEntries(formData.entries()));
+  const parsed = eventSchema.extend({ clientId: z.string().uuid() }).safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error("INVALID_INPUT");
   const data = parsed.data;
-  const { data: event, error } = await supabase.from("shift_events").insert({
+  const { error } = await supabase.from("shift_events").insert({
+    id: data.clientId,
     hotel_id: profile.hotel_id, operation_date: operationDate, event_time: data.eventTime,
     category: data.category, room_area: data.roomArea || null, description: data.description,
     action_taken: data.actionTaken || null, status: data.status, priority: data.priority,
     requires_follow_up: data.requiresFollowUp, created_by: user.id
-  }).select("id").single();
-  if (error || !event) throw new Error("SAVE_FAILED");
-
-  if (data.requiresFollowUp || data.status !== "completed") {
-    const { error: taskError } = await supabase.from("tasks").insert({
-      hotel_id: profile.hotel_id, operation_date: operationDate, source_event_id: event.id,
-      title: data.description, room_area: data.roomArea || null, priority: data.priority,
-      status: "open", created_by: user.id
-    });
-    if (taskError) throw new Error("TASK_SAVE_FAILED");
-  }
+  });
+  if (error && error.code !== "23505") throw new Error("SAVE_FAILED");
   revalidatePath("/events"); revalidatePath("/tasks"); revalidatePath("/dashboard");
+}
+
+const eventUpdateSchema = z.object({
+  id: z.string().uuid(),
+  status: eventSchema.shape.status,
+  priority: eventSchema.shape.priority,
+  roomArea: eventSchema.shape.roomArea,
+  description: eventSchema.shape.description,
+  actionTaken: eventSchema.shape.actionTaken
+});
+
+/** Edit / resolve an incident. Its task is closed or reopened by the 0020 trigger. */
+export async function updateEvent(formData: FormData): Promise<ActionResult> {
+  return runAction("updateEvent", async () => {
+    const { supabase, profile } = await authorizeWrite();
+    const parsed = eventUpdateSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error(`INVALID_INPUT: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`);
+    const d = parsed.data;
+    const { data: updated, error } = await supabase.from("shift_events").update({
+      status: d.status, priority: d.priority, room_area: d.roomArea || null,
+      description: d.description, action_taken: d.actionTaken || null, updated_at: new Date().toISOString()
+    }).eq("id", d.id).eq("hotel_id", profile.hotel_id).select("id").single();
+    if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "incident not updated"}`);
+    revalidatePath("/events"); revalidatePath("/tasks"); revalidatePath("/dashboard");
+  });
 }
 
 const tourSchema = z.object({

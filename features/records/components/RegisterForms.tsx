@@ -29,6 +29,8 @@ function RegisterModal({ kind, locale, label, defaultBookedBy, onClose }: { kind
   const [contacts,setContacts] = useState<Contact[]>([]);
   const [contactError,setContactError] = useState(false);
   const [category,setCategory] = useState("arriving");
+  // One id per opened form: re-submitting after an error re-sends the same incident instead of a new one.
+  const [eventClientId] = useState(() => crypto.randomUUID());
   const [saved,setSaved] = useState<{text:string;operator?:string}|null>(null);
   useEffect(()=>{let active=true;getContacts().then(data=>{if(active)setContacts(data);}).catch(()=>{if(active)setContactError(true);});return()=>{active=false;};},[]);
   const [operator, setOperator] = useState<string>(TOUR_OPERATORS[0]);
@@ -78,6 +80,7 @@ ${es ? "Acción tomada" : "Action taken"}: ${formData.get("actionTaken")}`});
   if(saved) return <div className="modal-backdrop"><section className="team-modal record-modal" role="dialog" aria-modal="true" aria-label={es?"Registro guardado":"Record saved"}><header><h2>{es?"Registro guardado":"Record saved"}</h2><button onClick={onClose}>×</button></header><div className="saved-message"><p>{es?"Revise el mensaje antes de compartirlo con el proveedor.":"Review the message before sharing it with the supplier."}</p><pre>{saved.text}</pre>{contactError?<p role="alert">{es?"No se pudo cargar el directorio de proveedores.":"Could not load supplier contacts."}</p>:<SupplierMessage contacts={contacts} operator={saved.operator} text={saved.text} locale={locale}/>}</div><footer><button className="secondary-button" onClick={onClose}>{es?"Cerrar":"Close"}</button></footer></section></div>;
   return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="team-modal record-modal" role="dialog" aria-modal="true"><header><h2>{label}</h2><button onClick={onClose}>×</button></header><form action={submit}>{error && <p className="form-error">{error}</p>}<div className="edit-cell-form">
     {kind === "event" && <>
+      <input type="hidden" name="clientId" value={eventClientId} />
       <label>{es ? "Categoría" : "Category"}<select name="category" value={category} onChange={e=>setCategory(e.target.value)}><option value="arriving">{es ? "Llegada" : "Arriving"}</option><option value="departure">{es ? "Salida" : "Departure"}</option><option value="guest_request">{es ? "Solicitud de huésped" : "Guest request"}</option><option value="guest_complaint">{es ? "Queja de huésped" : "Guest complaint"}</option><option value="maintenance">{es ? "Mantenimiento" : "Maintenance"}</option><option value="security">{es ? "Seguridad" : "Security"}</option><option value="other">{es ? "Otro" : "Other"}</option></select></label>
       <label>{es ? "Hora" : "Time"}<input name="eventTime" type="time" defaultValue={time} required /></label>
       <label>{es ? "Habitación / Área" : "Room / Area"}<input name="roomArea" placeholder="Room 6 / Reception" /></label>

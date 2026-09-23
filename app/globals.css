@@ -244,3 +244,4 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 @media(max-width:600px){.supplier-card{padding:18px}.directory-toolbar>label,.directory-toolbar>button{width:100%}}
 .tour-status-editor{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.tour-status-editor select,.tour-status-editor input{min-height:34px;font-size:12px}.tour-status-editor .secondary-button{min-height:34px;font-size:12px;padding:6px 12px}.tour-status-editor [role=status]{font-size:11px;color:var(--muted)}
 .income-reversal td{color:#853a3a}.income-unpaid td{opacity:.6}
+.source-incident{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.source-incident small{color:var(--muted)}
