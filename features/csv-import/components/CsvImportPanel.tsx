@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { ArrowUpRight, LogIn, LogOut, CheckCircle2, FileSpreadsheet, Upload, X } from "lucide-react";
+import { LogIn, LogOut, CheckCircle2, FileSpreadsheet, Upload, X } from "lucide-react";
 import { commitCsvImport, type ImportState } from "@/features/csv-import/actions";
 import { parseCsv, type ParsedCsv } from "@/features/csv-import/logic/parser";
 import { dictionary, type Locale } from "@/lib/i18n";
@@ -10,7 +10,7 @@ type ImportKind = "check_in" | "check_out";
 type LoadedFile = ParsedCsv & { name: string; kind: ImportKind };
 const initialState: ImportState = { status: "idle" };
 
-export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale; variant?: "compact" | "cards" }) {
+export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale; variant?: "compact" | "bar" }) {
   const t = dictionary(locale);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState<LoadedFile | null>(null);
@@ -29,15 +29,12 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
   }
 
   return <>
-    <div className={`csv-actions ${variant === "cards" ? "import-card-grid" : ""}`}>
-      {variant === "cards" ? <>{(["check_in", "check_out"] as const).map(kind => {
-        const arrival = kind === "check_in"; const Icon = arrival ? LogIn : LogOut; const es = locale === "es";
-        return <button key={kind} type="button" className={`import-card ${arrival ? "is-arrival" : "is-departure"}`} onClick={() => (arrival ? checkInRef : checkOutRef).current?.click()}>
-          <span className="import-card-top"><span className="import-icon"><Icon size={20} aria-hidden="true" /></span><ArrowUpRight size={18} aria-hidden="true" /></span>
-          <strong>{arrival ? "Check-ins CSV" : "Check-outs CSV"}</strong><span className="import-description">{es ? (arrival ? "Subir llegadas de hoy" : "Subir salidas de hoy") : (arrival ? "Upload today's arrivals" : "Upload today's departures")}</span>
-          <span className="import-card-action"><Upload size={13} aria-hidden="true" />{es ? "Cargar archivo" : "Upload file"}</span>
-        </button>;
-      })}</> : <><button className="primary-button" onClick={() => checkInRef.current?.click()}><Upload size={17} />{t.importCheckIns}</button><button className="secondary-button" onClick={() => checkOutRef.current?.click()}><Upload size={17} />{t.importCheckOuts}</button></>}
+    <div className={`csv-actions ${variant === "bar" ? "import-bar" : ""}`}>
+      {variant === "bar" ? <>
+        <span className="import-bar-label"><FileSpreadsheet size={16} aria-hidden="true" />LITTLE HOTELIER · CSV</span>
+        <button type="button" className="secondary-button import-bar-button" onClick={() => checkInRef.current?.click()}><LogIn size={15} aria-hidden="true" />{locale === "es" ? "Subir check-ins" : "Upload check-ins"}</button>
+        <button type="button" className="secondary-button import-bar-button" onClick={() => checkOutRef.current?.click()}><LogOut size={15} aria-hidden="true" />{locale === "es" ? "Subir check-outs" : "Upload check-outs"}</button>
+      </> : <><button className="primary-button" onClick={() => checkInRef.current?.click()}><Upload size={17} />{t.importCheckIns}</button><button className="secondary-button" onClick={() => checkOutRef.current?.click()}><Upload size={17} />{t.importCheckOuts}</button></>}
       <input ref={checkInRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_in", event.target.files?.[0])} />
       <input ref={checkOutRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_out", event.target.files?.[0])} />
     </div>

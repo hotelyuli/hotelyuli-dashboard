@@ -103,19 +103,26 @@ export default async function DashboardPage() {
     { label: t.kpiStayThrough, value: stayThrough, note: es ? "huéspedes alojados" : "in-house stays", icon: BedDouble },
     { label: t.kpiAvailable, value: available, note: es ? "unidades libres" : "available units", icon: BedDouble },
     { label: t.breakfasts, value: breakfastCovers, note: t.includedCovers, icon: Coffee },
-    { label: t.pendingPayments, value: pending.length, note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign },
-    { label: t.openTasks, value: taskCount ?? 0, note: t.activeFollowups, icon: ClipboardCheck },
+    // Border rule: only cards that need action today get the terracotta accent.
+    { label: t.pendingPayments, value: pending.length, note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign, attention: pending.length > 0 },
+    { label: t.openTasks, value: taskCount ?? 0, note: t.activeFollowups, icon: ClipboardCheck, attention: (taskCount ?? 0) > 0 },
     { label: es ? "Tours de hoy" : "Today's tours", value: tourCount, note: es ? `${paidTourCount} pagados` : `${paidTourCount} paid`, icon: Waves }
   ];
   return (
     <main className="reception-dashboard">
-      <section className="reception-imports"><div className="section-caption"><h2>{es ? "Importación de datos" : "Data import"}</h2><span>LITTLE HOTELIER · CSV</span></div><CsvImportPanel locale={locale} variant="cards" /></section>
+      <section className="reception-imports" aria-label={es ? "Importación de datos" : "Data import"}><CsvImportPanel locale={locale} variant="bar" /></section>
       <div className="reception-columns">
         <div className="reception-main">
           <section className="reception-kpis" aria-label={es ? "Indicadores del día" : "Today's overview"}>
-            {cards.map(({ label, value, note, icon: Icon }) => <article className="metric-card" key={label}><span>{label}</span><Icon size={17} aria-hidden="true" /><strong>{value}</strong><small>{note}</small></article>)}
+            {cards.map(({ label, value, note, icon: Icon, attention }) => <article className={`metric-card${attention ? " needs-attention" : ""}`} key={label}><span>{label}</span><Icon size={17} aria-hidden="true" /><strong>{value}</strong><small>{note}</small></article>)}
           </section>
-          <div className="occupancy-bar"><span>{es ? "Ocupación de hoy" : "Today's occupancy"}: <strong>{occupied}/{capacity} · {occupancy}%</strong></span><progress value={occupancy} max={100} aria-label={es ? "Ocupación" : "Occupancy"} /></div>
+          <section className="occupancy-bar" aria-label={es ? "Ocupación de hoy" : "Today's occupancy"}>
+            <div className="occupancy-head">
+              <div><small>{es ? "OCUPACIÓN DE HOY" : "TODAY'S OCCUPANCY"}</small><p><strong>{occupied}</strong> {es ? `de ${capacity} unidades ocupadas` : `of ${capacity} units occupied`}</p></div>
+              <strong className="occupancy-percent">{occupancy}%</strong>
+            </div>
+            <div className="occupancy-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={occupancy} aria-label={es ? "Ocupación" : "Occupancy"}><span style={{ width: `${occupancy}%` }} /></div>
+          </section>
           <section className="reception-panel" aria-labelledby="room-board-title"><div className="panel-title"><h2 id="room-board-title">{t.operationsTitle}</h2><span className="count-pill">{boardRows.length} {es ? "unidades" : "units"}</span></div><RoomBoardTable rows={boardRows} rooms={roomOptions} locale={locale} /></section>
           <section className="reception-panel"><div className="panel-title"><h2>{es ? "Ingresos de hoy" : "Today's income"}</h2><Link href="/income">{es ? "Ver ingresos" : "View income"}</Link></div><div className="pending-totals"><strong>USD {incomeToday.USD.toFixed(2)}</strong><strong>CRC {incomeToday.CRC.toFixed(2)}</strong></div><p className="panel-note">{es ? "Solo lo cobrado, incluidas comisiones de tours pagados; los reversos restan." : "Settled money only, including paid tour commissions; reversals subtract."}</p></section>
           <section className="reception-panel"><div className="panel-title"><h2>{t.pendingPayments}</h2></div><div className="pending-totals"><strong>USD {pendingUsd.toFixed(2)}</strong><strong>CRC {pendingCrc.toFixed(2)}</strong></div><p className="panel-note">{es ? "USD y CRC se mantienen separados." : "USD and CRC are kept separate."}</p></section>

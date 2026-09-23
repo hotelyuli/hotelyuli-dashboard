@@ -213,7 +213,7 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .reception-toolbar .close-shift-link{margin-left:auto;background:var(--wine)}
 .reception-columns{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;max-width:1800px;margin:auto;padding:22px 26px 40px}
 .reception-main{min-width:0}.reception-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-.reception-kpis .metric-card{min-height:112px;padding:15px 16px;border-radius:12px;gap:3px}.reception-kpis .metric-card>span{font-size:12.5px}.reception-kpis .metric-card strong{font-size:38px;line-height:1.05}.reception-kpis .metric-card small{font-size:11px}.reception-kpis .metric-card:nth-child(1),.reception-kpis .metric-card:nth-child(6),.reception-kpis .metric-card:nth-child(7){border-left:3px solid var(--terracotta)}
+.reception-kpis .metric-card{min-height:112px;padding:15px 16px;border-radius:12px;gap:3px}.reception-kpis .metric-card>span{font-size:12.5px}.reception-kpis .metric-card strong{font-size:38px;line-height:1.05}.reception-kpis .metric-card small{font-size:11px}.reception-kpis .metric-card.needs-attention{border-left:3px solid var(--terracotta)}
 .occupancy-bar{display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin:16px 0 22px;padding:12px 16px;background:var(--blush);border-radius:10px;font-size:13px}.occupancy-bar progress{width:min(260px,100%);height:8px;accent-color:var(--terracotta)}
 .reception-panel{background:white;border:1px solid var(--line);border-radius:12px;box-shadow:0 2px 12px #4d333e08;overflow:hidden;margin-bottom:22px}.panel-title{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}.panel-title h2{font-size:23px;font-weight:600;margin:0}.panel-title a{margin-left:auto;font-size:12px}.count-pill{display:inline-block;width:fit-content;border-radius:20px;background:var(--blush);padding:2px 8px;font-size:11px;color:var(--muted)}
 .reception-panel .board-table-wrap{margin-top:0;border:0;border-radius:0}.reception-panel .board-table th{padding:12px 10px;font-size:10px}.reception-panel .board-table td{padding:10px;font-size:12px}
@@ -250,3 +250,18 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .tour-status-editor{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.tour-status-editor select,.tour-status-editor input{min-height:34px;font-size:12px}.tour-status-editor .secondary-button{min-height:34px;font-size:12px;padding:6px 12px}.tour-status-editor [role=status]{font-size:11px;color:var(--muted)}
 .income-reversal td{color:#853a3a}.income-unpaid td{opacity:.6}
 .source-incident{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.source-incident small{color:var(--muted)}
+/* Dashboard: compact Little Hotelier import bar */
+.reception-imports{padding-top:14px;padding-bottom:0}
+.import-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;padding:8px 10px 8px 16px;background:white;border:1px solid var(--line);border-radius:14px}
+.import-bar-label{display:inline-flex;align-items:center;gap:8px;margin-right:auto;font-size:10px;font-weight:750;letter-spacing:.12em;color:var(--muted)}
+.import-bar .import-bar-button{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:6px 14px;font-size:12px;border-radius:999px}
+/* Dashboard: prominent occupancy ("X of Y") in the Hotel Yuli palette */
+.occupancy-bar{display:block;margin:16px 0 22px;padding:16px 18px;background:white;border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px #35232b04}
+.occupancy-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:10px}
+.occupancy-head small{font-size:10px;font-weight:750;letter-spacing:.12em;color:var(--muted)}
+.occupancy-head p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.occupancy-head p strong{margin-right:4px;font-family:var(--font-display),serif;font-size:30px;font-weight:600;color:var(--ink)}
+.occupancy-percent{font-family:var(--font-display),serif;font-size:30px;font-weight:600;line-height:1;color:var(--terracotta)}
+.occupancy-track{height:12px;border-radius:999px;background:var(--blush);overflow:hidden}
+.occupancy-track span{display:block;height:100%;border-radius:inherit;background:var(--terracotta);transition:width .4s ease}
+@media(max-width:700px){.import-bar-label{width:100%;margin-right:0}.import-bar .import-bar-button{flex:1 1 0;justify-content:center}.occupancy-head p strong,.occupancy-percent{font-size:24px}}
