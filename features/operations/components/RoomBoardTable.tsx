@@ -185,11 +185,12 @@ function EditCellModal({ row, t, onClose }: { row: BoardRow; t: Dict; onClose: (
     data.set("paymentReason", leavesPaid ? paymentReason : "");
     startTransition(async () => {
       try {
-        await updateOperationCell(data);
+        const result = await updateOperationCell(data);
+        if (!result.ok) { setError(result.error); return; }
         router.refresh();
         onClose();
-      } catch {
-        setError("SAVE_FAILED");
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "SAVE_FAILED");
       }
     });
   }

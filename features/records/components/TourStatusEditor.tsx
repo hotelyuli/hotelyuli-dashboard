@@ -20,12 +20,13 @@ export function TourStatusEditor({ id, status, locale }: { id: string; status: T
     if (leavesPaid && !reason.trim()) { setMessage(es ? "Indique el motivo." : "Enter a reason."); return; }
     startTransition(async () => {
       try {
-        await setTourStatus(formData);
+        const result = await setTourStatus(formData);
+        if (!result.ok) { setMessage(`${es ? "No se pudo guardar" : "Could not save"}: ${result.error}`); return; }
         setMessage(es ? "Guardado" : "Saved");
         setReason("");
         router.refresh();
-      } catch {
-        setMessage(es ? "No se pudo guardar." : "Could not save.");
+      } catch (caught) {
+        setMessage(`${es ? "No se pudo guardar" : "Could not save"}: ${caught instanceof Error ? caught.message : "?"}`);
       }
     });
   }

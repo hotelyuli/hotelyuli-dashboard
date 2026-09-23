@@ -9,6 +9,7 @@ import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { resolveRoomTokens } from "@/features/operations/logic/room-resolver";
 import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
 import { TOUR_INCOME_CATEGORY, TOUR_INCOME_METHOD } from "./logic/tour-commission";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function authorizeWrite() {
   const { supabase, user } = await requireSession();
@@ -101,7 +102,11 @@ const tourStatusSchema = z.object({
  * Leaving paid (pending/cancelled) -> a reversing income row with a mandatory reason.
  * The ledger is written before the status, so a failed status update is healed by a retry.
  */
-export async function setTourStatus(formData: FormData) {
+export async function setTourStatus(formData: FormData): Promise<ActionResult> {
+  return runAction("setTourStatus", () => saveTourStatus(formData));
+}
+
+async function saveTourStatus(formData: FormData) {
   const { supabase, user, profile, operationDate } = await authorizeWrite();
   const parsed = tourStatusSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) throw new Error("INVALID_INPUT");
@@ -111,7 +116,7 @@ export async function setTourStatus(formData: FormData) {
     .from("tour_bookings")
     .select("id, guest_name, room_number, operator_name, tour_name, tour_date, currency, commission_amount")
     .eq("id", id).eq("hotel_id", profile.hotel_id).single();
-  if (tourError || !tour) throw new Error("NOT_FOUND");
+  if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? id}`);
 
   await applySettlement({
     ledger: supabaseLedger({ supabase, hotelId: profile.hotel_id, userId: user.id, operationDate }),
@@ -130,7 +135,7 @@ export async function setTourStatus(formData: FormData) {
   });
 
   const { data: updated, error } = await supabase.from("tour_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", tour.id).eq("hotel_id", profile.hotel_id).select("id").single();
-  if (error || !updated) throw new Error("SAVE_FAILED");
+  if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "tour not updated"}`);
   revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard");
 }
 

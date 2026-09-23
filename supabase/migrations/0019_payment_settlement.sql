@@ -1,9 +1,68 @@
 -- Paid -> Income settlement ledger (append-only).
 -- A tour or a stay marked paid gets exactly one linked income payment row;
 -- un-paying adds a reversal row that references it. Rows are never updated
--- or deleted. Safe to re-run.
+-- or deleted.
+--
+-- The app's only income table is public.income_entries (created by 0012).
+-- Part 1 creates it -- and the Sheets outbox the income code also writes to --
+-- with the exact 0012 definitions when they are missing, so this migration
+-- works whether or not 0012 was applied live. Safe to re-run.
 begin;
 
+-- Part 1: base tables (no-ops when 0012 is already live) -------------------
+create table if not exists public.income_entries (
+  id uuid primary key default gen_random_uuid(),
+  hotel_id uuid not null references public.hotels(id) on delete restrict,
+  operation_date date not null,
+  room_number text null,
+  guest_name text not null,
+  paid boolean not null default true,
+  category text not null,
+  amount numeric not null check (amount >= 0),
+  currency text not null check (currency in ('USD', 'CRC')),
+  payment_method text not null,
+  reference_note text null,
+  created_by uuid not null references public.profiles(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.google_sheets_outbox (
+  id uuid primary key default gen_random_uuid(),
+  hotel_id uuid not null references public.hotels(id) on delete restrict,
+  entity_type text not null check (entity_type in ('tour', 'income')),
+  entity_id uuid not null,
+  payload jsonb not null,
+  status text not null default 'pending' check (status in ('pending', 'sent', 'failed')),
+  attempt_count integer not null default 0,
+  last_error text null,
+  sent_at timestamptz null,
+  created_at timestamptz not null default now(),
+  unique (entity_type, entity_id)
+);
+
+alter table public.income_entries enable row level security;
+alter table public.google_sheets_outbox enable row level security;
+
+drop policy if exists income_entries_select on public.income_entries;
+create policy income_entries_select on public.income_entries for select to authenticated
+using (hotel_id = public.current_hotel_id());
+
+drop policy if exists sheets_outbox_select on public.google_sheets_outbox;
+create policy sheets_outbox_select on public.google_sheets_outbox for select to authenticated
+using (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager'));
+drop policy if exists sheets_outbox_insert on public.google_sheets_outbox;
+create policy sheets_outbox_insert on public.google_sheets_outbox for insert to authenticated
+with check (hotel_id = public.current_hotel_id() and public.current_app_role() in ('owner','manager','reception'));
+
+create index if not exists income_hotel_date_idx on public.income_entries (hotel_id, operation_date, created_at desc);
+create index if not exists sheets_outbox_pending_idx on public.google_sheets_outbox (status, created_at) where status in ('pending','failed');
+
+drop trigger if exists income_entries_audit on public.income_entries;
+create trigger income_entries_audit after insert or update or delete on public.income_entries
+for each row execute function public.log_audit_event();
+
+-- Part 2: settlement ledger columns and rules -------------------------------
 alter table public.income_entries
   add column if not exists entry_type text not null default 'payment',
   add column if not exists source_type text null,

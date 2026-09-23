@@ -8,6 +8,7 @@ import type { AppRole } from "@/features/auth/logic/permissions";
 import { materializeUnit, type ReservationForBoard } from "@/features/operations/logic/board";
 import { BED_SETUPS, HOUSEKEEPERS, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 async function authorizeOperationsWrite() {
   const { supabase, user } = await requireSession();
@@ -39,15 +40,19 @@ const updateCellSchema = z.object({
   paymentReason: z.string().trim().max(500).default("")
 });
 
-export async function updateOperationCell(formData: FormData) {
+export async function updateOperationCell(formData: FormData): Promise<ActionResult> {
+  return runAction("updateOperationCell", () => saveOperationCell(formData));
+}
+
+async function saveOperationCell(formData: FormData) {
   const { supabase, user, hotelId } = await authorizeOperationsWrite();
   const parsed = updateCellSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) throw new Error("INVALID_INPUT");
+  if (!parsed.success) throw new Error(`INVALID_INPUT: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`);
   const data = parsed.data;
   let outstandingBalance = data.outstandingBalance === "" ? null : Number.parseFloat(data.outstandingBalance);
 
-  const { data: current } = await supabase.from("daily_operations").select("room_id, reservation_id, payment_status, guest_name, operation_date").eq("id", data.rowId).eq("hotel_id", hotelId).single();
-  if (!current) throw new Error("NOT_FOUND");
+  const { data: current, error: currentError } = await supabase.from("daily_operations").select("room_id, reservation_id, payment_status, guest_name, operation_date").eq("id", data.rowId).eq("hotel_id", hotelId).single();
+  if (!current) throw new Error(`ROW_NOT_FOUND: ${currentError?.message ?? data.rowId}`);
   const { data: room } = await supabase.from("rooms").select("unit_code, display_name").eq("id", current.room_id).eq("hotel_id", hotelId).single();
 
   // Bed setup only applies to the convertible rooms; anything else is stored as null.
@@ -57,6 +62,7 @@ export async function updateOperationCell(formData: FormData) {
   // paid books a reversing row. The ledger is written before the board row.
   const becomesPaid = data.paymentStatus === "paid" && current.payment_status !== "paid";
   const leavesPaid = current.payment_status === "paid" && data.paymentStatus !== "paid";
+  if (becomesPaid && !data.currency) throw new Error("CURRENCY_REQUIRED: choose USD or CRC to mark paid");
   if (becomesPaid || leavesPaid) {
     const amountReceived = Number.parseFloat(data.amountReceived);
     await applySettlement({
@@ -76,7 +82,11 @@ export async function updateOperationCell(formData: FormData) {
     });
     if (becomesPaid) {
       outstandingBalance = 0;
-      if (current.reservation_id) await supabase.from("reservations").update({ outstanding_balance: 0, updated_at: new Date().toISOString() }).eq("id", current.reservation_id).eq("hotel_id", hotelId);
+      if (current.reservation_id) {
+        const { error: reservationError } = await supabase.from("reservations").update({ outstanding_balance: 0, updated_at: new Date().toISOString() }).eq("id", current.reservation_id).eq("hotel_id", hotelId);
+        // Income is already booked; a stale reservation balance only affects future days' board rows.
+        if (reservationError) console.error(`[updateOperationCell] reservation balance not cleared: ${reservationError.message}`);
+      }
     }
   }
 
@@ -105,7 +115,7 @@ export async function updateOperationCell(formData: FormData) {
     .eq("hotel_id", hotelId)
     .select("id")
     .single();
-  if (error || !updated) throw new Error("SAVE_FAILED");
+  if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "row not updated"}`);
 
   revalidatePath("/operations");
   revalidatePath("/dashboard");

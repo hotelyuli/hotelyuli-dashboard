@@ -88,7 +88,7 @@ export function supabaseLedger(params: { supabase: SupabaseClient<Database>; hot
         .eq("hotel_id", hotelId)
         .eq("source_type", source.type)
         .eq("source_id", source.id);
-      if (error) throw new SettlementError("LEDGER_LOAD_FAILED");
+      if (error) throw new SettlementError(`LEDGER_LOAD_FAILED: ${error.message}`);
       return (data ?? []).map((row) => ({
         id: row.id,
         entryType: row.entry_type,
@@ -125,9 +125,9 @@ export function supabaseLedger(params: { supabase: SupabaseClient<Database>; hot
       };
       const { data, error } = await supabase.from("income_entries").insert(payload).select("id").single();
       if (error?.code === "23505") return null;
-      if (error || !data) throw new SettlementError("INCOME_SAVE_FAILED");
+      if (error || !data) throw new SettlementError(`INCOME_SAVE_FAILED: ${error?.message ?? "no row returned"}`);
       const { error: queueError } = await supabase.from("google_sheets_outbox").insert({ hotel_id: hotelId, entity_type: "income", entity_id: data.id, payload });
-      if (queueError) throw new SettlementError("QUEUE_FAILED");
+      if (queueError) throw new SettlementError(`QUEUE_FAILED: ${queueError.message}`);
       return data.id;
     }
   };
