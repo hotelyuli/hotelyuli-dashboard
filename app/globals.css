@@ -28,10 +28,7 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .login-brand span { color: #d7b9bb; }
 .login-panel { display: grid; place-items: center; padding: 2rem; }
 .login-card { width: min(440px, 100%); }
-.login-logo { display: block; margin: 0 auto 2.2rem; max-width: min(260px, 80%); max-height: 160px; width: auto; height: auto; object-fit: contain; }
-.login-logo-fallback { display: flex; flex-direction: column; align-items: center; gap: .8rem; }
-.login-logo-fallback img { width: 72px; height: 72px; }
-.login-logo-fallback span { color: var(--wine); font-weight: 700; letter-spacing: .22em; font-size: .9rem; }
+.login-logo { display: block; margin: 0 auto 2rem; width: min(200px, 60vw); height: auto; }
 .language-switcher { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: #ffffff12; }
 .language-switcher button { border: 0; border-radius: 6px; padding: .42rem .62rem; background: transparent; color: inherit; font-size: .75rem; font-weight: 800; }
 .language-switcher button.active { background: var(--terracotta); color: white; }
