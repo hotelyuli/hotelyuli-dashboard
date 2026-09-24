@@ -176,3 +176,28 @@ describe("flushSheetsOutbox", () => {
     expect(h.state.get("o1")!.last_error).toMatch(/SHEETS_API_403/);
   });
 });
+
+describe("flush per-row reporting", () => {
+  it("returns and logs one line per row with the real outcome", async () => {
+    const lines: string[] = [];
+    const store: OutboxStore = {
+      claim: async () => [
+        { id: "a", entity_type: "tour", entity_id: "t1", attempt_count: 0, sheet_range: null, sheet_values: null },
+        { id: "b", entity_type: "income", entity_id: "i1", attempt_count: 0, sheet_range: null, sheet_values: null }
+      ],
+      loadTour: async () => tour,
+      loadIncome: async () => ({ income, enrichment: { bookingChannel: "Booking.com", reservationDate: null } }),
+      saveLocation: async () => {}, markSent: async () => {}, markSkipped: async () => {}, markFailed: async () => {}
+    };
+    const sheets: SheetsWriter = {
+      append: vi.fn(async (target) => { if (target.spreadsheetId === "I") throw new Error("SHEETS_API_403: The caller does not have permission (share the sheet with the service account email as Editor)"); return "'T'!A9:I9"; }),
+      readRow: async () => null, findTourRow: async () => null, update: async () => {}
+    };
+    const result = await flushSheetsOutbox({ store, sheets, targets: { tours: { spreadsheetId: "T", headers: TOURS_HEADERS }, income: { spreadsheetId: "I", headers: INCOME_HEADERS } }, log: (line) => lines.push(line) });
+    expect(result.items).toEqual([
+      { entity_type: "tour", entity_id: "t1", outcome: "sent", detail: "tours 'T'!A9:I9" },
+      { entity_type: "income", entity_id: "i1", outcome: "failed", detail: "SHEETS_API_403: The caller does not have permission (share the sheet with the service account email as Editor)" }
+    ]);
+    expect(lines).toEqual(["[sheets] tour t1: sent - tours 'T'!A9:I9", "[sheets] income i1: failed - SHEETS_API_403: The caller does not have permission (share the sheet with the service account email as Editor)"]);
+  });
+});

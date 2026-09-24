@@ -33,7 +33,8 @@ export type SheetsWriter = {
 };
 
 export type SheetsTargets = { tours: SheetTarget; income: SheetTarget };
-export type FlushResult = { claimed: number; sent: number; skipped: number; failed: number; errors: string[] };
+export type FlushItemResult = { entity_type: "tour" | "income"; entity_id: string; outcome: "sent" | "updated" | "skipped" | "failed"; detail: string };
+export type FlushResult = { claimed: number; sent: number; skipped: number; failed: number; errors: string[]; items: FlushItemResult[] };
 
 export const MAX_ATTEMPTS = 5;
 
@@ -63,35 +64,47 @@ async function writeTour(item: OutboxItem, row: Cell[], sheets: SheetsWriter, ta
   return sheets.append(target, row);
 }
 
-export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: SheetsWriter; targets: SheetsTargets; limit?: number }): Promise<FlushResult> {
+export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: SheetsWriter; targets: SheetsTargets; limit?: number; log?: (line: string) => void }): Promise<FlushResult> {
   const { store, sheets, targets } = deps;
   const items = await store.claim(deps.limit ?? 25);
-  const result: FlushResult = { claimed: items.length, sent: 0, skipped: 0, failed: 0, errors: [] };
+  const result: FlushResult = { claimed: items.length, sent: 0, skipped: 0, failed: 0, errors: [], items: [] };
+  // One log line per row (Vercel function logs) + the same in the response.
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const record = (item: OutboxItem, outcome: FlushItemResult["outcome"], detail: string) => {
+    result.items.push({ entity_type: item.entity_type, entity_id: item.entity_id, outcome, detail });
+    log(`[sheets] ${item.entity_type} ${item.entity_id}: ${outcome} - ${detail}`);
+  };
 
   for (const item of items) {
     try {
       if (item.entity_type === "tour") {
         const tour = await store.loadTour(item.entity_id);
-        if (!tour) { await store.markSkipped(item.id, "SKIPPED: tour no longer exists"); result.skipped += 1; continue; }
+        if (!tour) { await store.markSkipped(item.id, "SKIPPED: tour no longer exists"); result.skipped += 1; record(item, "skipped", "tour no longer exists"); continue; }
         const row = tourRow(tour);
         const range = await writeTour(item, row, sheets, targets.tours);
         await store.saveLocation(item.id, range, row);
+        await store.markSent(item.id);
+        result.sent += 1;
+        record(item, item.sheet_range ? "updated" : "sent", `tours ${range}`);
+        continue;
       } else {
         const loaded = await store.loadIncome(item.entity_id);
-        if (!loaded) { await store.markSkipped(item.id, "SKIPPED: income entry no longer exists"); result.skipped += 1; continue; }
-        if (!shouldExportIncome(loaded.income)) { await store.markSkipped(item.id, "SKIPPED: not settled (unpaid)"); result.skipped += 1; continue; }
+        if (!loaded) { await store.markSkipped(item.id, "SKIPPED: income entry no longer exists"); result.skipped += 1; record(item, "skipped", "income entry no longer exists"); continue; }
+        if (!shouldExportIncome(loaded.income)) { await store.markSkipped(item.id, "SKIPPED: not settled (unpaid)"); result.skipped += 1; record(item, "skipped", "not settled (unpaid)"); continue; }
         const row = incomeRow(loaded.income, loaded.enrichment);
         // Income is append-only: a queue item is written once.
         const range = item.sheet_range ?? await sheets.append(targets.income, row);
         await store.saveLocation(item.id, range, row);
+        await store.markSent(item.id);
+        result.sent += 1;
+        record(item, "sent", `income ${range}`);
       }
-      await store.markSent(item.id);
-      result.sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await store.markFailed(item.id, message, item.attempt_count + 1);
       result.failed += 1;
       result.errors.push(`${item.entity_type} ${item.entity_id}: ${message}`);
+      record(item, "failed", message);
     }
   }
   return result;
