@@ -1,6 +1,6 @@
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { findHeaderRow, incomeRow, INCOME_HEADERS, moneyCell, textCell, tourRow, TOURS_HEADERS, type Cell, type IncomeRecord, type TourRecord } from "@/features/sheets/rows";
+import { findHeaderRow, incomeRow, INCOME_HEADERS, moneyCell, monthTabName, tabKey, textCell, tourRow, TOURS_HEADERS, type Cell, type IncomeRecord, type TourRecord } from "@/features/sheets/rows";
 import { createSheetsClient, parseServiceAccount, signServiceAccountJwt } from "@/features/sheets/google";
 import { flushSheetsOutbox, type OutboxItem, type OutboxStore, type SheetsWriter } from "@/features/sheets/flush";
 
@@ -72,33 +72,75 @@ describe("Google auth + client", () => {
     expect(JSON.parse(Buffer.from(claims, "base64url").toString())).toMatchObject({ iss: keyFile.client_email, scope: "https://www.googleapis.com/auth/spreadsheets", aud: "https://oauth2.googleapis.com/token", iat: 1_000, exp: 4_600 });
   });
 
-  function fakeGoogle(headerRow: string[], appendRange = "'Tours 2026'!A42:I42") {
+  function fakeGoogle(tabs: Record<string, unknown[][]>) {
     const calls: { url: string; method: string; body?: string }[] = [];
     const fetchImpl = vi.fn(async (url: string, init: RequestInit = {}) => {
       calls.push({ url, method: init.method ?? "GET", body: init.body?.toString() });
       const json = (body: object, status = 200) => ({ ok: status < 400, status, statusText: "", json: async () => body });
+      const decoded = decodeURIComponent(url);
       if (url.includes("oauth2")) return json({ access_token: "tok", expires_in: 3600 });
-      if (url.includes("fields=sheets.properties.title")) return json({ sheets: [{ properties: { title: "Tours 2026" } }] });
-      if (url.includes(":append")) return json({ updates: { updatedRange: appendRange } });
-      if (url.includes("A1%3AI10")) return json({ values: [headerRow] });
+      if (url.includes("fields=sheets.properties.title")) return json({ sheets: Object.keys(tabs).map((title) => ({ properties: { title } })) });
+      if (url.includes(":batchUpdate")) {
+        const title = JSON.parse(init.body!.toString()).requests[0].addSheet.properties.title as string;
+        tabs[title] = [];
+        return json({});
+      }
+      if (url.includes(":append")) return json({ updates: { updatedRange: `${decoded.split("/values/")[1].split("!")[0]}!A42:I42` } });
+      const tab = Object.keys(tabs).find((title) => decoded.includes(`'${title}'!A1:I10`));
+      if (tab) return json({ values: tabs[tab] });
       return json({});
     });
     return { client: createSheetsClient(keyFile, fetchImpl as unknown as typeof fetch), calls };
   }
   const target = { spreadsheetId: "14CZ", headers: TOURS_HEADERS };
 
-  it("appends under the matching header row of the first tab, with USER_ENTERED + INSERT_ROWS", async () => {
-    const { client, calls } = fakeGoogle([...TOURS_HEADERS]);
-    await expect(client.append(target, tourRow(tour))).resolves.toBe("'Tours 2026'!A42:I42");
+  it("appends to the existing monthly tab under its header row, with USER_ENTERED + INSERT_ROWS", async () => {
+    const { client, calls } = fakeGoogle({ AGOSTO2026: [[...TOURS_HEADERS]], SEPTIEMBRE2026: [[...TOURS_HEADERS]] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'SEPTIEMBRE2026'!A42:I42");
     const append = calls.find((call) => call.url.includes(":append"))!;
-    expect(decodeURIComponent(append.url)).toContain("'Tours 2026'!A:I:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS");
+    expect(decodeURIComponent(append.url)).toContain("'SEPTIEMBRE2026'!A:I:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS");
     expect(JSON.parse(append.body!)).toEqual({ values: [tourRow(tour)] });
+    expect(calls.some((call) => call.url.includes(":batchUpdate"))).toBe(false);
   });
 
-  it("refuses to write when the tab's headers do not match", async () => {
-    const { client, calls } = fakeGoogle(["DATE", "SOMETHING ELSE"]);
-    await expect(client.append(target, tourRow(tour))).rejects.toThrow(/SHEETS_HEADER_MISMATCH/);
+  it("reuses an existing tab spelled SETIEMBRE / with spaces instead of creating a second one", async () => {
+    const { client, calls } = fakeGoogle({ "Setiembre 2026": [[...TOURS_HEADERS]] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'Setiembre 2026'!A42:I42");
+    expect(calls.some((call) => call.url.includes(":batchUpdate"))).toBe(false);
+  });
+
+  it("creates a missing monthly tab and writes the header row before the first entry", async () => {
+    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [[...TOURS_HEADERS]] });
+    await expect(client.append(target, "OCTUBRE2026", tourRow({ ...tour, tour_date: "2026-10-02" }))).resolves.toBe("'OCTUBRE2026'!A42:I42");
+    const created = calls.find((call) => call.url.includes(":batchUpdate"))!;
+    expect(JSON.parse(created.body!).requests[0].addSheet.properties.title).toBe("OCTUBRE2026");
+    const header = calls.find((call) => call.method === "PUT")!;
+    expect(decodeURIComponent(header.url)).toContain("'OCTUBRE2026'!A1:I1?valueInputOption=RAW");
+    expect(JSON.parse(header.body!)).toEqual({ values: [[...TOURS_HEADERS]] });
+    expect(calls.findIndex((call) => call.method === "PUT")).toBeLessThan(calls.findIndex((call) => call.url.includes(":append")));
+  });
+
+  it("refuses to write into a monthly tab whose headers do not match", async () => {
+    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [["DATE", "SOMETHING ELSE"]] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).rejects.toThrow(/SHEETS_HEADER_MISMATCH/);
     expect(calls.some((call) => call.url.includes(":append"))).toBe(false);
+  });
+});
+
+describe("monthly tab names", () => {
+  it("uses the Spanish month in capitals + year, no space", () => {
+    expect(monthTabName("2026-09-24")).toBe("SEPTIEMBRE2026");
+    expect(monthTabName("2026-10-01")).toBe("OCTUBRE2026");
+    expect(monthTabName("2027-01-15")).toBe("ENERO2027");
+    expect(["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((m) => monthTabName(`2026-${m}-01`).replace("2026", "")))
+      .toEqual(["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]);
+    expect(() => monthTabName("not a date")).toThrow(/SHEETS_BAD_DATE/);
+  });
+
+  it("matches existing tabs loosely: case, spaces, accents, SETIEMBRE", () => {
+    expect(tabKey("Setiembre 2026")).toBe(tabKey("SEPTIEMBRE2026"));
+    expect(tabKey("octubre-2026")).toBe(tabKey("OCTUBRE2026"));
+    expect(tabKey("SEPTIEMBRE2025")).not.toBe(tabKey("SEPTIEMBRE2026"));
   });
 });
 
@@ -119,7 +161,7 @@ describe("flushSheetsOutbox", () => {
     const sheetRows = new Map<string, unknown[]>();
     let next = 10;
     const sheets: SheetsWriter = {
-      append: vi.fn(async (target, row: Cell[]) => { const range = `'${target.spreadsheetId}'!A${next}:I${next}`; next += 1; sheetRows.set(range, row); return range; }),
+      append: vi.fn(async (target, _tab: string, row: Cell[]) => { const range = `'${target.spreadsheetId}'!A${next}:I${next}`; next += 1; sheetRows.set(range, row); return range; }),
       readRow: vi.fn(async (_target, range: string) => sheetRows.get(range) ?? null),
       findTourRow: vi.fn(async () => null),
       update: vi.fn(async (_target, range: string, row: Cell[]) => { sheetRows.set(range, row); })
@@ -133,6 +175,13 @@ describe("flushSheetsOutbox", () => {
     const result = await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
     expect(result).toMatchObject({ claimed: 1, sent: 1, failed: 0 });
     expect(h.state.get("o1")).toMatchObject({ status: "sent", sheet_range: "'T'!A10:I10" });
+  });
+
+  it("routes each row to the monthly tab of its date (TOUR DATE for tours, DATE for income)", async () => {
+    const h = harness([item({}), item({ id: "o2", entity_type: "income", entity_id: "i1" })], { tours: { t1: { ...tour, tour_date: "2026-10-03" } }, incomes: { i1: income } });
+    await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
+    expect(h.sheets.append).toHaveBeenCalledWith(targets.tours, "OCTUBRE2026", expect.any(Array));
+    expect(h.sheets.append).toHaveBeenCalledWith(targets.income, "SEPTIEMBRE2026", expect.any(Array));
   });
 
   it("a tour that became paid updates its existing row instead of adding a duplicate", async () => {

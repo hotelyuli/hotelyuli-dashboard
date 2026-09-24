@@ -1,4 +1,4 @@
-import { incomeRow, shouldExportIncome, tourRow, tourRowKey, INCOME_HEADERS, TOURS_HEADERS, type Cell, type IncomeEnrichment, type IncomeRecord, type TourRecord } from "./rows";
+import { incomeRow, monthTabName, shouldExportIncome, tourRow, tourRowKey, INCOME_HEADERS, TOURS_HEADERS, type Cell, type IncomeEnrichment, type IncomeRecord, type TourRecord } from "./rows";
 import type { SheetTarget } from "./google";
 
 // Flushes google_sheets_outbox to the two spreadsheets. Storage and Google are
@@ -26,9 +26,10 @@ export type OutboxStore = {
 };
 
 export type SheetsWriter = {
-  append(target: SheetTarget, row: Cell[]): Promise<string>;
+  /** Appends to the monthly tab (created with headers if missing). */
+  append(target: SheetTarget, tab: string, row: Cell[]): Promise<string>;
   readRow(target: SheetTarget, range: string): Promise<unknown[] | null>;
-  findTourRow(target: SheetTarget, key: string): Promise<string | null>;
+  findTourRow(target: SheetTarget, tab: string, key: string): Promise<string | null>;
   update(target: SheetTarget, range: string, row: Cell[]): Promise<void>;
 };
 
@@ -43,25 +44,25 @@ export function targetsFromEnv(env: NodeJS.ProcessEnv = process.env): SheetsTarg
   const income = env.GOOGLE_SHEETS_INCOME_ID?.trim();
   if (!tours || !income) throw new Error("SHEETS_NOT_CONFIGURED: GOOGLE_SHEETS_TOURS_ID and GOOGLE_SHEETS_INCOME_ID are required");
   return {
-    tours: { spreadsheetId: tours, tab: env.GOOGLE_SHEETS_TOURS_TAB, headers: TOURS_HEADERS },
-    income: { spreadsheetId: income, tab: env.GOOGLE_SHEETS_INCOME_TAB, headers: INCOME_HEADERS }
+    tours: { spreadsheetId: tours, headers: TOURS_HEADERS },
+    income: { spreadsheetId: income, headers: INCOME_HEADERS }
   };
 }
 
 /** A tour row is updated in place when we know where it is (and it still holds that tour); otherwise appended. */
-async function writeTour(item: OutboxItem, row: Cell[], sheets: SheetsWriter, target: SheetTarget): Promise<string> {
+async function writeTour(item: OutboxItem, row: Cell[], sheets: SheetsWriter, target: SheetTarget, tab: string): Promise<string> {
   if (item.sheet_range && item.sheet_values) {
     const expectedKey = tourRowKey(item.sheet_values);
     const current = await sheets.readRow(target, item.sheet_range);
     const range = current && tourRowKey(current as Cell[]) === expectedKey
       ? item.sheet_range
-      : await sheets.findTourRow(target, expectedKey); // rows were sorted / moved by hand
+      : await sheets.findTourRow(target, tab, expectedKey); // rows were sorted / moved by hand
     if (range) {
       await sheets.update(target, range, row);
       return range;
     }
   }
-  return sheets.append(target, row);
+  return sheets.append(target, tab, row);
 }
 
 export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: SheetsWriter; targets: SheetsTargets; limit?: number; log?: (line: string) => void }): Promise<FlushResult> {
@@ -81,7 +82,8 @@ export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: Shee
         const tour = await store.loadTour(item.entity_id);
         if (!tour) { await store.markSkipped(item.id, "SKIPPED: tour no longer exists"); result.skipped += 1; record(item, "skipped", "tour no longer exists"); continue; }
         const row = tourRow(tour);
-        const range = await writeTour(item, row, sheets, targets.tours);
+        // Monthly tab by TOUR DATE, e.g. SEPTIEMBRE2026.
+        const range = await writeTour(item, row, sheets, targets.tours, monthTabName(tour.tour_date));
         await store.saveLocation(item.id, range, row);
         await store.markSent(item.id);
         result.sent += 1;
@@ -93,7 +95,8 @@ export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: Shee
         if (!shouldExportIncome(loaded.income)) { await store.markSkipped(item.id, "SKIPPED: not settled (unpaid)"); result.skipped += 1; record(item, "skipped", "not settled (unpaid)"); continue; }
         const row = incomeRow(loaded.income, loaded.enrichment);
         // Income is append-only: a queue item is written once.
-        const range = item.sheet_range ?? await sheets.append(targets.income, row);
+        // Monthly tab by the entry's DATE, e.g. SEPTIEMBRE2026.
+        const range = item.sheet_range ?? await sheets.append(targets.income, monthTabName(loaded.income.operation_date), row);
         await store.saveLocation(item.id, range, row);
         await store.markSent(item.id);
         result.sent += 1;

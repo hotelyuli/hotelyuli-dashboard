@@ -108,3 +108,22 @@ const normalizeHeader = (cell: unknown) => String(cell ?? "").replace(/\s+/g, " 
 export function findHeaderRow(rows: readonly (readonly unknown[])[], headers: readonly string[]): number {
   return rows.findIndex((row) => headers.every((header, index) => normalizeHeader(row[index]) === normalizeHeader(header)));
 }
+
+const MONTHS_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+
+/** Monthly tab for an entry date: "2026-09-24" -> "SEPTIEMBRE2026" (Spanish month, caps, no space). */
+export function monthTabName(isoDate: string): string {
+  const [year, month] = isoDate.slice(0, 10).split("-");
+  const name = MONTHS_ES[Number(month) - 1];
+  if (!name || !/^\d{4}$/.test(year ?? "")) throw new Error(`SHEETS_BAD_DATE: cannot pick a monthly tab for "${isoDate}"`);
+  return `${name}${year}`;
+}
+
+/**
+ * Comparison key for tab names: case, spaces, punctuation and accents ignored, and
+ * the Costa Rican spelling SETIEMBRE treated as SEPTIEMBRE - so an existing
+ * "Setiembre 2026" tab is reused instead of creating a second September tab.
+ */
+export function tabKey(name: string): string {
+  return name.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^SETIEMBRE/, "SEPTIEMBRE");
+}

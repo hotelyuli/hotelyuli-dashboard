@@ -1,11 +1,12 @@
 import { createSign } from "node:crypto";
-import { findHeaderRow, tourRowKey, type Cell } from "./rows";
+import { findHeaderRow, tabKey, tourRowKey, type Cell } from "./rows";
 
 // Server-only Google Sheets client: service-account JWT (RS256) -> OAuth token ->
 // Sheets REST v4. No SDK dependency; nothing here is imported by client code.
 
 export type ServiceAccount = { client_email: string; private_key: string };
-export type SheetTarget = { spreadsheetId: string; tab?: string; headers: readonly string[] };
+/** A spreadsheet; the tab is chosen per row (monthly tabs, e.g. SEPTIEMBRE2026). */
+export type SheetTarget = { spreadsheetId: string; headers: readonly string[] };
 
 const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -38,8 +39,8 @@ type Fetch = typeof fetch;
 
 export function createSheetsClient(account: ServiceAccount, fetchImpl: Fetch = fetch) {
   let token: { value: string; expiresAt: number } | null = null;
-  const titles = new Map<string, string>();
-  const checkedHeaders = new Set<string>();
+  const tabTitles = new Map<string, string[]>(); // spreadsheetId -> tab titles
+  const readyTabs = new Set<string>(); // "spreadsheetId|title" with verified headers
 
   async function accessToken(): Promise<string> {
     if (token && token.expiresAt > Date.now() + 60_000) return token.value;
@@ -64,40 +65,57 @@ export function createSheetsClient(account: ServiceAccount, fetchImpl: Fetch = f
     return body;
   }
 
-  /** Tab to write to: the configured one, else the spreadsheet's first tab. */
-  async function tabTitle(target: SheetTarget): Promise<string> {
-    if (target.tab?.trim()) return target.tab.trim();
-    const cached = titles.get(target.spreadsheetId);
-    if (cached) return cached;
-    const meta = await call<{ sheets?: { properties?: { title?: string } }[] }>(`${API}/${target.spreadsheetId}?fields=sheets.properties.title`);
-    const title = meta.sheets?.[0]?.properties?.title;
-    if (!title) throw new SheetsError("SHEETS_NO_TAB: the spreadsheet has no tabs");
-    titles.set(target.spreadsheetId, title);
-    return title;
-  }
-
   const quote = (title: string) => `'${title.replace(/'/g, "''")}'`;
   const lastColumn = (target: SheetTarget) => String.fromCharCode(64 + target.headers.length);
   const valuesUrl = (target: SheetTarget, range: string) => `${API}/${target.spreadsheetId}/values/${encodeURIComponent(range)}`;
 
-  /** Refuses to write unless the tab's header row matches the expected columns exactly. */
-  async function ensureHeaders(target: SheetTarget): Promise<string> {
-    const title = await tabTitle(target);
-    const key = `${target.spreadsheetId}|${title}`;
-    if (checkedHeaders.has(key)) return title;
-    const data = await call<{ values?: unknown[][] }>(`${valuesUrl(target, `${quote(title)}!A1:${lastColumn(target)}10`)}?valueRenderOption=UNFORMATTED_VALUE`);
-    if (findHeaderRow(data.values ?? [], target.headers) < 0) {
-      throw new SheetsError(`SHEETS_HEADER_MISMATCH: tab "${title}" does not have the headers ${target.headers.join(" | ")} in its first 10 rows (set the *_TAB env var if the data is on another tab)`);
+  async function listTabs(spreadsheetId: string, refresh = false): Promise<string[]> {
+    const cached = tabTitles.get(spreadsheetId);
+    if (cached && !refresh) return cached;
+    const meta = await call<{ sheets?: { properties?: { title?: string } }[] }>(`${API}/${spreadsheetId}?fields=sheets.properties.title`);
+    const titles = (meta.sheets ?? []).flatMap((sheet) => (sheet.properties?.title ? [sheet.properties.title] : []));
+    tabTitles.set(spreadsheetId, titles);
+    return titles;
+  }
+
+  const findTab = (titles: string[], wanted: string) => titles.find((title) => tabKey(title) === tabKey(wanted));
+
+  /**
+   * The monthly tab to write to, created (with the header row) when it does not exist.
+   * An existing tab is matched loosely (SETIEMBRE = SEPTIEMBRE, case/spaces ignored).
+   * An empty existing tab gets the header row; a tab with other headers is refused.
+   */
+  async function ensureTab(target: SheetTarget, wanted: string): Promise<string> {
+    let title = findTab(await listTabs(target.spreadsheetId), wanted);
+    if (!title) {
+      try {
+        await call(`${API}/${target.spreadsheetId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: wanted, gridProperties: { frozenRowCount: 1 } } } }] }) });
+        title = wanted;
+      } catch (error) {
+        // Another run created it a moment ago: use that one.
+        title = findTab(await listTabs(target.spreadsheetId, true), wanted);
+        if (!title) throw error;
+      }
+      tabTitles.set(target.spreadsheetId, [...(tabTitles.get(target.spreadsheetId) ?? []).filter((t) => t !== title), title]);
     }
-    checkedHeaders.add(key);
+    const key = `${target.spreadsheetId}|${title}`;
+    if (readyTabs.has(key)) return title;
+    const data = await call<{ values?: unknown[][] }>(`${valuesUrl(target, `${quote(title)}!A1:${lastColumn(target)}10`)}?valueRenderOption=UNFORMATTED_VALUE`);
+    const rows = data.values ?? [];
+    if (!rows.some((row) => row.some((cell) => String(cell ?? "").trim()))) {
+      await call(`${valuesUrl(target, `${quote(title)}!A1:${lastColumn(target)}1`)}?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: [[...target.headers]] }) });
+    } else if (findHeaderRow(rows, target.headers) < 0) {
+      throw new SheetsError(`SHEETS_HEADER_MISMATCH: tab "${title}" does not have the headers ${target.headers.join(" | ")} in its first 10 rows`);
+    }
+    readyTabs.add(key);
     return title;
   }
 
   return {
-    ensureHeaders,
-    /** Appends one row under the table; returns the A1 range written (e.g. 'Sheet1'!A120:I120). */
-    async append(target: SheetTarget, row: Cell[]): Promise<string> {
-      const title = await ensureHeaders(target);
+    ensureTab,
+    /** Appends one row under the table of the given monthly tab; returns the A1 range written. */
+    async append(target: SheetTarget, tab: string, row: Cell[]): Promise<string> {
+      const title = await ensureTab(target, tab);
       const result = await call<{ updates?: { updatedRange?: string } }>(
         `${valuesUrl(target, `${quote(title)}!A:${lastColumn(target)}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
         { method: "POST", body: JSON.stringify({ values: [row] }) }
@@ -110,9 +128,10 @@ export function createSheetsClient(account: ServiceAccount, fetchImpl: Fetch = f
       const data = await call<{ values?: unknown[][] }>(`${valuesUrl(target, range)}?valueRenderOption=UNFORMATTED_VALUE`);
       return data.values?.[0] ?? null;
     },
-    /** Last row whose operator / tour / guest columns match `key` (see tourRowKey); null if none. */
-    async findTourRow(target: SheetTarget, key: string): Promise<string | null> {
-      const title = await ensureHeaders(target);
+    /** Last row of the monthly tab whose operator / tour / guest columns match `key` (see tourRowKey); null if none. */
+    async findTourRow(target: SheetTarget, tab: string, key: string): Promise<string | null> {
+      const title = findTab(await listTabs(target.spreadsheetId), tab);
+      if (!title) return null;
       const data = await call<{ values?: unknown[][] }>(`${valuesUrl(target, `${quote(title)}!A:${lastColumn(target)}`)}?valueRenderOption=UNFORMATTED_VALUE`);
       const rows = data.values ?? [];
       for (let index = rows.length - 1; index >= 0; index -= 1) {
