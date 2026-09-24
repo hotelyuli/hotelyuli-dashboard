@@ -69,9 +69,31 @@ export function supabaseOutboxStore(db: Admin): OutboxStore {
   };
 }
 
+const REQUIRED_ENV = ["GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_SHEETS_TOURS_ID", "GOOGLE_SHEETS_INCOME_ID", "SUPABASE_SERVICE_ROLE_KEY", "NEXT_PUBLIC_SUPABASE_URL"] as const;
+
+/** Names (never values) of the env vars the export still needs in this deployment. */
+export function missingSheetsEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return REQUIRED_ENV.filter((name) => !env[name]?.trim());
+}
+
 /** Whether the export is configured; without it, entries simply stay queued. */
 export function sheetsExportConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.GOOGLE_SERVICE_ACCOUNT_JSON && env.GOOGLE_SHEETS_TOURS_ID && env.GOOGLE_SHEETS_INCOME_ID && env.SUPABASE_SERVICE_ROLE_KEY);
+  return missingSheetsEnv(env).length === 0;
+}
+
+/** Queue counts by status and whether migration 0027 is live (read with the service role). */
+export async function outboxDiagnostics(): Promise<Record<string, unknown>> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) return { error: "SUPABASE_SERVICE_ROLE_KEY not set: cannot read the outbox" };
+  const db = createAdminClient();
+  const counts: Record<string, number> = {};
+  for (const status of ["pending", "sending", "sent", "failed", "skipped"] as const) {
+    const { count, error } = await db.from("google_sheets_outbox").select("id", { count: "exact", head: true }).eq("status", status);
+    if (error) return { error: `OUTBOX_READ_FAILED: ${error.message}` };
+    counts[status] = count ?? 0;
+  }
+  const migration0027 = !(await db.from("google_sheets_outbox").select("sheet_range").limit(1)).error;
+  const { data: lastErrors } = await db.from("google_sheets_outbox").select("entity_type, status, attempt_count, last_error, created_at").eq("status", "failed").order("created_at", { ascending: false }).limit(5);
+  return { counts, migration0027Applied: migration0027, recentFailures: lastErrors ?? [] };
 }
 
 export async function runSheetsExport(): Promise<FlushResult> {
@@ -84,7 +106,12 @@ export async function runSheetsExport(): Promise<FlushResult> {
 
 /** Fire-and-forget flush right after a save (called inside next/server `after`). Never throws. */
 export async function flushSheetsSoon(): Promise<void> {
-  if (!sheetsExportConfigured()) return;
+  const missing = missingSheetsEnv();
+  if (missing.length) {
+    // Visible in the Vercel function logs: the entry stays queued until these are set.
+    console.warn(`[sheets] not sent yet - missing env: ${missing.join(", ")}`);
+    return;
+  }
   try {
     const result = await runSheetsExport();
     if (result.failed) console.error(`[sheets] ${result.failed} item(s) failed: ${result.errors.join(" | ")}`);
