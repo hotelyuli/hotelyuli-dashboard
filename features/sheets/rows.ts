@@ -102,11 +102,66 @@ export function tourRowKey(row: readonly Cell[]): string {
   return [row[1], row[2], row[3]].map((cell) => String(cell ?? "").trim().toLowerCase()).join("|");
 }
 
-const normalizeHeader = (cell: unknown) => String(cell ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+/** Header comparison key: case, accents and ALL whitespace ignored ("GUEST NAME/ PAX QTY" = "GUEST NAME/PAX QTY"). */
+export function headerKey(cell: unknown): string {
+  return String(cell ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "").toUpperCase();
+}
 
-/** Index (0-based) of the row among `rows` whose first cells equal the expected headers, or -1. */
+/** Where our columns sit in a sheet: the header row and, per field (in our order), its 0-based sheet column. */
+export type HeaderLayout = { rowIndex: number; columns: number[] };
+
+/**
+ * Finds the header row among `rows` that contains every expected header, in any
+ * order and among any extra columns (COMPROBANTE #, Column 1, ...). Null if none.
+ */
+export function findHeaderLayout(rows: readonly (readonly unknown[])[], headers: readonly string[]): HeaderLayout | null {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const keys = (rows[rowIndex] ?? []).map(headerKey);
+    const columns = headers.map((header) => keys.indexOf(headerKey(header)));
+    if (columns.every((column) => column >= 0)) return { rowIndex, columns };
+  }
+  return null;
+}
+
+/** Expected headers not found in the best-matching row among `rows` (for the error message). */
+export function missingHeaders(rows: readonly (readonly unknown[])[], headers: readonly string[]): string[] {
+  let best: string[] = [...headers];
+  for (const row of rows) {
+    const keys = new Set((row ?? []).map(headerKey));
+    const missing = headers.filter((header) => !keys.has(headerKey(header)));
+    if (missing.length < best.length) best = missing;
+  }
+  return best;
+}
+
+/** Index (0-based) of the header row among `rows`, or -1. */
 export function findHeaderRow(rows: readonly (readonly unknown[])[], headers: readonly string[]): number {
-  return rows.findIndex((row) => headers.every((header, index) => normalizeHeader(row[index]) === normalizeHeader(header)));
+  return findHeaderLayout(rows, headers)?.rowIndex ?? -1;
+}
+
+/**
+ * Our row (in our header order) spread onto the sheet's columns. Every other
+ * column is null, which the Sheets API skips - so unknown columns are left untouched.
+ */
+export function toSheetRow(row: readonly Cell[], columns: readonly number[]): (Cell | null)[] {
+  const sheetRow: (Cell | null)[] = Array.from({ length: Math.max(...columns) + 1 }, () => null);
+  columns.forEach((column, index) => { sheetRow[column] = row[index] ?? ""; });
+  return sheetRow;
+}
+
+/** A sheet row read back into our header order. */
+export function fromSheetRow(sheetRow: readonly unknown[], columns: readonly number[]): Cell[] {
+  return columns.map((column) => {
+    const value = sheetRow[column];
+    return typeof value === "number" ? value : String(value ?? "");
+  });
+}
+
+/** 0-based column index -> A1 letters (0 -> A, 26 -> AA). */
+export function columnLetter(index: number): string {
+  let letters = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+  return letters;
 }
 
 const MONTHS_ES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];

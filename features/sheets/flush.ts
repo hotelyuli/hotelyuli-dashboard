@@ -28,7 +28,8 @@ export type OutboxStore = {
 export type SheetsWriter = {
   /** Appends to the monthly tab (created with headers if missing). */
   append(target: SheetTarget, tab: string, row: Cell[]): Promise<string>;
-  readRow(target: SheetTarget, range: string): Promise<unknown[] | null>;
+  /** The row at `range`, in our header order (sheet columns are mapped by header name). */
+  readRow(target: SheetTarget, range: string): Promise<Cell[] | null>;
   findTourRow(target: SheetTarget, tab: string, key: string): Promise<string | null>;
   update(target: SheetTarget, range: string, row: Cell[]): Promise<void>;
 };
@@ -54,7 +55,7 @@ async function writeTour(item: OutboxItem, row: Cell[], sheets: SheetsWriter, ta
   if (item.sheet_range && item.sheet_values) {
     const expectedKey = tourRowKey(item.sheet_values);
     const current = await sheets.readRow(target, item.sheet_range);
-    const range = current && tourRowKey(current as Cell[]) === expectedKey
+    const range = current && tourRowKey(current) === expectedKey
       ? item.sheet_range
       : await sheets.findTourRow(target, tab, expectedKey); // rows were sorted / moved by hand
     if (range) {

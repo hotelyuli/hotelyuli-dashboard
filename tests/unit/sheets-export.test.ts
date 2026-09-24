@@ -1,6 +1,6 @@
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { findHeaderRow, incomeRow, INCOME_HEADERS, moneyCell, monthTabName, tabKey, textCell, tourRow, TOURS_HEADERS, type Cell, type IncomeRecord, type TourRecord } from "@/features/sheets/rows";
+import { columnLetter, findHeaderLayout, findHeaderRow, fromSheetRow, headerKey, incomeRow, INCOME_HEADERS, moneyCell, monthTabName, tabKey, textCell, toSheetRow, tourRow, tourRowKey, TOURS_HEADERS, type Cell, type IncomeRecord, type TourRecord } from "@/features/sheets/rows";
 import { createSheetsClient, parseServiceAccount, signServiceAccountJwt } from "@/features/sheets/google";
 import { flushSheetsOutbox, type OutboxItem, type OutboxStore, type SheetsWriter } from "@/features/sheets/flush";
 
@@ -86,8 +86,16 @@ describe("Google auth + client", () => {
         return json({});
       }
       if (url.includes(":append")) return json({ updates: { updatedRange: `${decoded.split("/values/")[1].split("!")[0]}!A42:I42` } });
-      const tab = Object.keys(tabs).find((title) => decoded.includes(`'${title}'!A1:I10`));
-      if (tab) return json({ values: tabs[tab] });
+      const rangePart = decoded.split("/values/")[1]?.split("?")[0];
+      if (rangePart && (init.method ?? "GET") === "GET") {
+        // Reads: header scan (1:10), one row (A42:J42) or whole columns (A:J).
+        const [rawTab, cells] = rangePart.split("!");
+        const rows = tabs[rawTab.replace(/^'|'$/g, "")] ?? [];
+        if (cells === "1:10") return json({ values: rows.slice(0, 10) });
+        const single = /^A(\d+):/.exec(cells);
+        if (single) return json({ values: rows[Number(single[1]) - 1] ? [rows[Number(single[1]) - 1]] : [] });
+        return json({ values: rows });
+      }
       return json({});
     });
     return { client: createSheetsClient(keyFile, fetchImpl as unknown as typeof fetch), calls };
@@ -125,6 +133,62 @@ describe("Google auth + client", () => {
     await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).rejects.toThrow(/SHEETS_HEADER_MISMATCH/);
     expect(calls.some((call) => call.url.includes(":append"))).toBe(false);
   });
+
+  // The real BOOKED TOURS header row: a space after the slash, an extra COMPROBANTE # column, a trailing "Column 1".
+  const REAL_TOURS = ["TOUR DATE", "TOUR OPERATOR", "TYPE OF TOUR", "GUEST NAME/ PAX QTY", "TOTAL TOUR", "TOTAL COMISSION", "STATUS", "PAYMENT METHOD", "COMPROBANTE #", "BOOKED BY", "Column 1"];
+
+  it("maps each field to the real sheet's column by header name; unknown columns are left alone", async () => {
+    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [REAL_TOURS] });
+    await client.append(target, "SEPTIEMBRE2026", tourRow(tour));
+    const append = calls.find((call) => call.url.includes(":append"))!;
+    expect(decodeURIComponent(append.url)).toContain("'SEPTIEMBRE2026'!A:J:append");
+    // COMPROBANTE # (I) is null = skipped by Sheets; BOOKED BY lands in J; Column 1 (K) is not touched.
+    expect(JSON.parse(append.body!).values[0]).toEqual([...tourRow(tour).slice(0, 8), null, "Rebeca"]);
+  });
+
+  it("matches headers in any order with extra spaces / case (income too)", async () => {
+    const shuffled = ["Source of  Payment", "NOTES", "date", "TOTAL", "CATEGORIES", "client", "DESCRIPTION", " Reservation Date "];
+    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [["BOOKINGS INCOME"], shuffled] });
+    const row = incomeRow(income, { bookingChannel: "Booking.com", reservationDate: "2026-09-20" });
+    await client.append({ spreadsheetId: "1cWS", headers: INCOME_HEADERS }, "SEPTIEMBRE2026", row);
+    const written = JSON.parse(calls.find((call) => call.url.includes(":append"))!.body!).values[0];
+    expect(written).toEqual([row[5], null, row[2], row[1], row[0], row[4], row[3], row[6]]);
+  });
+
+  it("updating a tour rewrites only our columns (COMPROBANTE # kept) and reads rows back by header", async () => {
+    const comprobante = "F-0091";
+    const sheetRow = [...tourRow(tour).slice(0, 8), comprobante, "Rebeca", "x"];
+    const rows = [REAL_TOURS, ...Array.from({ length: 40 }, () => [] as unknown[]), sheetRow];
+    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: rows });
+    // Google returns unquoted titles when they need no quotes.
+    await expect(client.readRow(target, "SEPTIEMBRE2026!A42:K42")).resolves.toEqual(tourRow(tour));
+    await expect(client.findTourRow(target, "SEPTIEMBRE2026", tourRowKey(tourRow(tour)))).resolves.toBe("'SEPTIEMBRE2026'!A42:J42");
+    const paid = tourRow({ ...tour, status: "paid" });
+    await client.update(target, "SEPTIEMBRE2026!A42:K42", paid);
+    const put = calls.filter((call) => call.method === "PUT").at(-1)!;
+    expect(decodeURIComponent(put.url)).toContain("'SEPTIEMBRE2026'!A42:J42?valueInputOption=USER_ENTERED");
+    expect(JSON.parse(put.body!).values[0]).toEqual([...paid.slice(0, 8), null, "Rebeca"]);
+  });
+
+  it("the mismatch error names the missing headers", async () => {
+    const { client } = fakeGoogle({ SEPTIEMBRE2026: [REAL_TOURS.filter((header) => header !== "BOOKED BY")] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).rejects.toThrow(/SHEETS_HEADER_MISMATCH: tab "SEPTIEMBRE2026" has no header row with BOOKED BY/);
+  });
+});
+
+describe("header mapping", () => {
+  it("ignores case and all whitespace, and finds columns wherever they sit", () => {
+    expect(headerKey("GUEST NAME/ PAX QTY")).toBe(headerKey("guest name/pax qty"));
+    expect(findHeaderLayout([["title"], ["TOUR DATE", "TOUR OPERATOR", "TYPE OF TOUR", "GUEST NAME/ PAX QTY", "TOTAL TOUR", "TOTAL COMISSION", "STATUS", "PAYMENT METHOD", "COMPROBANTE #", "BOOKED BY", "Column 1"]], TOURS_HEADERS))
+      .toEqual({ rowIndex: 1, columns: [0, 1, 2, 3, 4, 5, 6, 7, 9] });
+    expect(findHeaderLayout([["DATE", "TOTAL"]], INCOME_HEADERS)).toBeNull();
+  });
+
+  it("spreads a row onto sheet columns (nulls elsewhere) and reads it back", () => {
+    expect(toSheetRow(["a", "b", "c"], [2, 0, 4])).toEqual(["b", null, "a", null, "c"]);
+    expect(fromSheetRow(["b", "x", "a", "y", 5], [2, 0, 4])).toEqual(["a", "b", 5]);
+    expect([0, 9, 25, 26, 27, 701, 702].map(columnLetter)).toEqual(["A", "J", "Z", "AA", "AB", "ZZ", "AAA"]);
+  });
 });
 
 describe("monthly tab names", () => {
@@ -158,7 +222,7 @@ describe("flushSheetsOutbox", () => {
       markSkipped: async (id, reason) => { Object.assign(state.get(id)!, { status: "skipped", last_error: reason }); },
       markFailed: async (id, error, attempts) => { Object.assign(state.get(id)!, { status: "failed", last_error: error, attempt_count: attempts }); }
     };
-    const sheetRows = new Map<string, unknown[]>();
+    const sheetRows = new Map<string, Cell[]>();
     let next = 10;
     const sheets: SheetsWriter = {
       append: vi.fn(async (target, _tab: string, row: Cell[]) => { const range = `'${target.spreadsheetId}'!A${next}:I${next}`; next += 1; sheetRows.set(range, row); return range; }),
