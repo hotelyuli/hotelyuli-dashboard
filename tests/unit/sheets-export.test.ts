@@ -1,7 +1,7 @@
 import { createVerify, generateKeyPairSync } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { columnLetter, findHeaderLayout, findHeaderRow, fromSheetRow, headerKey, incomeRow, INCOME_HEADERS, moneyCell, monthTabName, tabKey, textCell, toSheetRow, tourRow, tourRowKey, TOURS_HEADERS, type Cell, type IncomeRecord, type TourRecord } from "@/features/sheets/rows";
-import { createSheetsClient, parseServiceAccount, signServiceAccountJwt } from "@/features/sheets/google";
+import { createSheetsClient, nextFreeRow, parseServiceAccount, signServiceAccountJwt } from "@/features/sheets/google";
 import { flushSheetsOutbox, type OutboxItem, type OutboxStore, type SheetsWriter } from "@/features/sheets/flush";
 
 const tour: TourRecord = { id: "t1", tour_date: "2026-09-25", operator_name: "Ballena Tours", tour_name: "Whale Watching", guest_name: "Ana Pérez", adults: 2, children: 1, total_price: 150, commission_amount: 30, currency: "USD", status: "pending", booked_by: "Rebeca" };
@@ -72,10 +72,17 @@ describe("Google auth + client", () => {
     expect(JSON.parse(Buffer.from(claims, "base64url").toString())).toMatchObject({ iss: keyFile.client_email, scope: "https://www.googleapis.com/auth/spreadsheets", aud: "https://oauth2.googleapis.com/token", iat: 1_000, exp: 4_600 });
   });
 
-  function fakeGoogle(tabs: Record<string, unknown[][]>) {
+  /**
+   * A stateful fake of the Sheets API: tab contents are row arrays (index 0 = column A).
+   * PUT writes a row from column A, skipping nulls like Google does; GET reads it back.
+   * `interfere` lets a "concurrent run" overwrite the first data row we write.
+   */
+  function fakeGoogle(tabs: Record<string, unknown[][]>, options: { interfere?: unknown[] } = {}) {
     const calls: { url: string; method: string; body?: string }[] = [];
+    let interfere = options.interfere;
     const fetchImpl = vi.fn(async (url: string, init: RequestInit = {}) => {
-      calls.push({ url, method: init.method ?? "GET", body: init.body?.toString() });
+      const method = init.method ?? "GET";
+      calls.push({ url, method, body: init.body?.toString() });
       const json = (body: object, status = 200) => ({ ok: status < 400, status, statusText: "", json: async () => body });
       const decoded = decodeURIComponent(url);
       if (url.includes("oauth2")) return json({ access_token: "tok", expires_in: 3600 });
@@ -85,74 +92,117 @@ describe("Google auth + client", () => {
         tabs[title] = [];
         return json({});
       }
-      if (url.includes(":append")) return json({ updates: { updatedRange: `${decoded.split("/values/")[1].split("!")[0]}!A42:I42` } });
+      if (url.includes(":append")) throw new Error("values:append must not be used (it shifts rows to the detected table's first column)");
       const rangePart = decoded.split("/values/")[1]?.split("?")[0];
-      if (rangePart && (init.method ?? "GET") === "GET") {
-        // Reads: header scan (1:10), one row (A42:J42) or whole columns (A:J).
-        const [rawTab, cells] = rangePart.split("!");
-        const rows = tabs[rawTab.replace(/^'|'$/g, "")] ?? [];
-        if (cells === "1:10") return json({ values: rows.slice(0, 10) });
-        const single = /^A(\d+):/.exec(cells);
-        if (single) return json({ values: rows[Number(single[1]) - 1] ? [rows[Number(single[1]) - 1]] : [] });
-        return json({ values: rows });
+      if (!rangePart) return json({});
+      const [rawTab, cells] = rangePart.split("!");
+      const rows = (tabs[rawTab.replace(/^'|'$/g, "").replace(/''/g, "'")] ??= []);
+      const single = /^A(\d+):/.exec(cells);
+      if (method === "PUT") {
+        if (!single) throw new Error(`writes must start at column A, got ${cells}`);
+        const index = Number(single[1]) - 1;
+        const values = JSON.parse(init.body!.toString()).values[0] as unknown[];
+        const target = (rows[index] = [...(rows[index] ?? [])]);
+        values.forEach((value, column) => { if (value !== null) target[column] = value; });
+        if (interfere && index > 0) { rows[index] = interfere; interfere = undefined; }
+        return json({});
       }
-      return json({});
+      if (cells === "1:10") return json({ values: rows.slice(0, 10) });
+      if (single) return json({ values: rows[Number(single[1]) - 1] ? [rows[Number(single[1]) - 1]] : [] });
+      return json({ values: rows });
     });
-    return { client: createSheetsClient(keyFile, fetchImpl as unknown as typeof fetch), calls };
+    return { client: createSheetsClient(keyFile, fetchImpl as unknown as typeof fetch), calls, tabs };
   }
   const target = { spreadsheetId: "14CZ", headers: TOURS_HEADERS };
 
-  it("appends to the existing monthly tab under its header row, with USER_ENTERED + INSERT_ROWS", async () => {
-    const { client, calls } = fakeGoogle({ AGOSTO2026: [[...TOURS_HEADERS]], SEPTIEMBRE2026: [[...TOURS_HEADERS]] });
-    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'SEPTIEMBRE2026'!A42:I42");
-    const append = calls.find((call) => call.url.includes(":append"))!;
-    expect(decodeURIComponent(append.url)).toContain("'SEPTIEMBRE2026'!A:I:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS");
-    expect(JSON.parse(append.body!)).toEqual({ values: [tourRow(tour)] });
+  it("writes the new row from column A on the row after the last entry", async () => {
+    const { client, tabs, calls } = fakeGoogle({ AGOSTO2026: [[...TOURS_HEADERS]], SEPTIEMBRE2026: [[...TOURS_HEADERS], tourRow(tour), tourRow(tour)] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow({ ...tour, guest_name: "Luis" }))).resolves.toBe("'SEPTIEMBRE2026'!A4:I4");
+    expect(tabs.SEPTIEMBRE2026[3]).toEqual(tourRow({ ...tour, guest_name: "Luis" }));
+    const put = calls.find((call) => call.method === "PUT")!;
+    expect(decodeURIComponent(put.url)).toContain("'SEPTIEMBRE2026'!A4:I4?valueInputOption=USER_ENTERED");
     expect(calls.some((call) => call.url.includes(":batchUpdate"))).toBe(false);
+  });
+
+  it("is not shifted to column E by totals / filled-down formulas in the money columns", async () => {
+    // Rows 2-3 hold entries; E/F below hold formulas, and row 40 a SUM total, as in a real sheet.
+    const rows: unknown[][] = [[...TOURS_HEADERS], tourRow(tour), tourRow(tour)];
+    for (let row = 4; row <= 39; row += 1) rows.push(["", "", "", "", `=IF(A${row}="","",0)`, `=E${row}*0.2`]);
+    rows.push(["", "", "", "TOTAL", "=SUM(E2:E39)", "=SUM(F2:F39)"]);
+    const { client, tabs } = fakeGoogle({ SEPTIEMBRE2026: rows });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow({ ...tour, guest_name: "Luis" }))).resolves.toBe("'SEPTIEMBRE2026'!A4:I4");
+    expect(tabs.SEPTIEMBRE2026[3][0]).toBe(tour.tour_date); // TOUR DATE in column A
+    expect(tabs.SEPTIEMBRE2026[3][3]).toBe("Luis / 3");
+  });
+
+  it("fills the space above a totals row but never writes over it", () => {
+    const layout = { headerRow: 1, columns: [0, 1, 2, 3, 4, 5, 6, 7, 8] };
+    const entry = tourRow(tour);
+    const totals = ["", "", "", "TOTAL", "=SUM(E2:E4)", "=SUM(F2:F4)"];
+    expect(nextFreeRow([[...TOURS_HEADERS], entry, [], [], totals], layout)).toBe(3);
+    expect(nextFreeRow([[...TOURS_HEADERS], entry, entry, entry, totals], layout)).toBe(6);
+    expect(nextFreeRow([[...TOURS_HEADERS]], layout)).toBe(2);
+    expect(nextFreeRow([["BOOKED TOURS"], [...TOURS_HEADERS], entry], { ...layout, headerRow: 2 })).toBe(4);
   });
 
   it("reuses an existing tab spelled SETIEMBRE / with spaces instead of creating a second one", async () => {
     const { client, calls } = fakeGoogle({ "Setiembre 2026": [[...TOURS_HEADERS]] });
-    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'Setiembre 2026'!A42:I42");
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'Setiembre 2026'!A2:I2");
     expect(calls.some((call) => call.url.includes(":batchUpdate"))).toBe(false);
   });
 
   it("creates a missing monthly tab and writes the header row before the first entry", async () => {
-    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [[...TOURS_HEADERS]] });
-    await expect(client.append(target, "OCTUBRE2026", tourRow({ ...tour, tour_date: "2026-10-02" }))).resolves.toBe("'OCTUBRE2026'!A42:I42");
+    const { client, calls, tabs } = fakeGoogle({ SEPTIEMBRE2026: [[...TOURS_HEADERS]] });
+    await expect(client.append(target, "OCTUBRE2026", tourRow({ ...tour, tour_date: "2026-10-02" }))).resolves.toBe("'OCTUBRE2026'!A2:I2");
     const created = calls.find((call) => call.url.includes(":batchUpdate"))!;
     expect(JSON.parse(created.body!).requests[0].addSheet.properties.title).toBe("OCTUBRE2026");
     const header = calls.find((call) => call.method === "PUT")!;
     expect(decodeURIComponent(header.url)).toContain("'OCTUBRE2026'!A1:I1?valueInputOption=RAW");
-    expect(JSON.parse(header.body!)).toEqual({ values: [[...TOURS_HEADERS]] });
-    expect(calls.findIndex((call) => call.method === "PUT")).toBeLessThan(calls.findIndex((call) => call.url.includes(":append")));
+    expect(tabs.OCTUBRE2026[0]).toEqual([...TOURS_HEADERS]);
+    expect(tabs.OCTUBRE2026[1][0]).toBe("2026-10-02");
   });
 
   it("refuses to write into a monthly tab whose headers do not match", async () => {
     const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [["DATE", "SOMETHING ELSE"]] });
     await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).rejects.toThrow(/SHEETS_HEADER_MISMATCH/);
-    expect(calls.some((call) => call.url.includes(":append"))).toBe(false);
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("if a concurrent run took the same row, writes to the next free one", async () => {
+    const other = tourRow({ ...tour, guest_name: "Otro" });
+    const { client, tabs } = fakeGoogle({ SEPTIEMBRE2026: [[...TOURS_HEADERS]] }, { interfere: other });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'SEPTIEMBRE2026'!A3:I3");
+    expect(tabs.SEPTIEMBRE2026[1]).toEqual(other);
+    expect(tabs.SEPTIEMBRE2026[2]).toEqual(tourRow(tour));
   });
 
   // The real BOOKED TOURS header row: a space after the slash, an extra COMPROBANTE # column, a trailing "Column 1".
   const REAL_TOURS = ["TOUR DATE", "TOUR OPERATOR", "TYPE OF TOUR", "GUEST NAME/ PAX QTY", "TOTAL TOUR", "TOTAL COMISSION", "STATUS", "PAYMENT METHOD", "COMPROBANTE #", "BOOKED BY", "Column 1"];
 
   it("maps each field to the real sheet's column by header name; unknown columns are left alone", async () => {
-    const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [REAL_TOURS] });
-    await client.append(target, "SEPTIEMBRE2026", tourRow(tour));
-    const append = calls.find((call) => call.url.includes(":append"))!;
-    expect(decodeURIComponent(append.url)).toContain("'SEPTIEMBRE2026'!A:J:append");
+    const { client, calls, tabs } = fakeGoogle({ SEPTIEMBRE2026: [REAL_TOURS] });
+    await expect(client.append(target, "SEPTIEMBRE2026", tourRow(tour))).resolves.toBe("'SEPTIEMBRE2026'!A2:J2");
     // COMPROBANTE # (I) is null = skipped by Sheets; BOOKED BY lands in J; Column 1 (K) is not touched.
-    expect(JSON.parse(append.body!).values[0]).toEqual([...tourRow(tour).slice(0, 8), null, "Rebeca"]);
+    const put = calls.find((call) => call.method === "PUT")!;
+    expect(JSON.parse(put.body!).values[0]).toEqual([...tourRow(tour).slice(0, 8), null, "Rebeca"]);
+    expect(tabs.SEPTIEMBRE2026[1].slice(0, 4)).toEqual(tourRow(tour).slice(0, 4));
   });
 
   it("matches headers in any order with extra spaces / case (income too)", async () => {
     const shuffled = ["Source of  Payment", "NOTES", "date", "TOTAL", "CATEGORIES", "client", "DESCRIPTION", " Reservation Date "];
     const { client, calls } = fakeGoogle({ SEPTIEMBRE2026: [["BOOKINGS INCOME"], shuffled] });
     const row = incomeRow(income, { bookingChannel: "Booking.com", reservationDate: "2026-09-20" });
-    await client.append({ spreadsheetId: "1cWS", headers: INCOME_HEADERS }, "SEPTIEMBRE2026", row);
-    const written = JSON.parse(calls.find((call) => call.url.includes(":append"))!.body!).values[0];
+    await expect(client.append({ spreadsheetId: "1cWS", headers: INCOME_HEADERS }, "SEPTIEMBRE2026", row)).resolves.toBe("'SEPTIEMBRE2026'!A3:H3");
+    const written = JSON.parse(calls.find((call) => call.method === "PUT")!.body!).values[0];
     expect(written).toEqual([row[5], null, row[2], row[1], row[0], row[4], row[3], row[6]]);
+  });
+
+  it("income is written from column A under the last entry, like tours", async () => {
+    const incomeTarget = { spreadsheetId: "1cWS", headers: INCOME_HEADERS };
+    const row = incomeRow(income, { bookingChannel: null, reservationDate: null });
+    const { client, tabs } = fakeGoogle({ SEPTIEMBRE2026: [[...INCOME_HEADERS], ["Booking.com", 90, "2026-09-01", "", "Ana", "Visa", ""], ["", "", "", "", "", "", ""]] });
+    await expect(client.append(incomeTarget, "SEPTIEMBRE2026", row)).resolves.toBe("'SEPTIEMBRE2026'!A3:G3");
+    expect(tabs.SEPTIEMBRE2026[2]).toEqual(row);
   });
 
   it("updating a tour rewrites only our columns (COMPROBANTE # kept) and reads rows back by header", async () => {

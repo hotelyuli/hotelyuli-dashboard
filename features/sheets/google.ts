@@ -45,6 +45,38 @@ export function parseRowRange(range: string): { tab: string; row: number } {
   return { tab, row: Number(match[2]) };
 }
 
+/**
+ * 1-based row for a new entry: the row after the last entry below the header.
+ * Rows are read with valueRenderOption=FORMULA, and formulas never count - so
+ * formulas filled down the money columns are written over, not skipped.
+ * An entry has typed values in at least 2 of our columns; a totals row (a "TOTAL"
+ * label + SUM formulas) is not one, so new rows fill the space above it. The chosen
+ * row is then moved down past any row that still holds a typed value, so nothing
+ * typed (such as that totals row) is ever overwritten.
+ */
+export function nextFreeRow(rows: readonly (readonly unknown[])[], layout: Pick<TabLayout, "headerRow" | "columns">): number {
+  const typedCount = (row: readonly unknown[] | undefined) => layout.columns.filter((column) => {
+    const cell = row?.[column];
+    return typeof cell === "number" || (typeof cell === "string" && cell.trim() !== "" && !cell.startsWith("="));
+  }).length;
+  let last = layout.headerRow;
+  rows.forEach((row, index) => { if (index + 1 > layout.headerRow && typedCount(row) >= 2) last = index + 1; });
+  let next = last + 1;
+  while (typedCount(rows[next - 1]) > 0) next += 1;
+  return next;
+}
+
+/**
+ * Whether a row read back still holds what we wrote, compared on plain text cells only
+ * (dates and numbers come back as serials / numbers; a leading ' is not stored).
+ */
+export function sameTextCells(written: readonly Cell[], readBack: readonly Cell[]): boolean {
+  return written.every((cell, index) => {
+    if (typeof cell !== "string" || cell === "" || /^\d{4}-\d{2}-\d{2}$/.test(cell)) return true;
+    return String(readBack[index] ?? "").trim() === cell.replace(/^'/, "").trim();
+  });
+}
+
 type Fetch = typeof fetch;
 
 export function createSheetsClient(account: ServiceAccount, fetchImpl: Fetch = fetch) {
@@ -133,18 +165,25 @@ export function createSheetsClient(account: ServiceAccount, fetchImpl: Fetch = f
   return {
     ensureTab,
     /**
-     * Appends one row under the table of the given monthly tab, each value in the column
-     * with its header; columns we do not own stay empty. Returns the A1 range written.
+     * Adds one row under the last entry of the given monthly tab, each value in the
+     * column with its header, starting at column A; columns we do not own stay empty.
+     * Returns the A1 range written.
+     *
+     * Not values:append on purpose: append writes from the first column of the "table"
+     * Google detects, so totals or filled-down formulas in E/F shifted whole rows to E.
+     * The row is chosen here instead, then read back: if a concurrent run took the same
+     * row, the next free one is used.
      */
     async append(target: SheetTarget, tab: string, row: Cell[]): Promise<string> {
       const layout = await ensureTab(target, tab);
-      const result = await call<{ updates?: { updatedRange?: string } }>(
-        `${valuesUrl(target, `${quote(layout.title)}!A:${layout.lastColumn}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-        { method: "POST", body: JSON.stringify({ values: [toSheetRow(row, layout.columns)] }) }
-      );
-      const range = result.updates?.updatedRange;
-      if (!range) throw new SheetsError("SHEETS_APPEND_NO_RANGE: Google did not report where the row was written");
-      return range;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const data = await call<{ values?: unknown[][] }>(`${valuesUrl(target, `${quote(layout.title)}!A:${layout.lastColumn}`)}?valueRenderOption=FORMULA`);
+        const range = rowRange(layout, nextFreeRow(data.values ?? [], layout));
+        await call(`${valuesUrl(target, range)}?valueInputOption=USER_ENTERED`, { method: "PUT", body: JSON.stringify({ values: [toSheetRow(row, layout.columns)] }) });
+        const written = await call<{ values?: unknown[][] }>(`${valuesUrl(target, range)}?valueRenderOption=UNFORMATTED_VALUE`);
+        if (sameTextCells(row, fromSheetRow(written.values?.[0] ?? [], layout.columns))) return range;
+      }
+      throw new SheetsError(`SHEETS_WRITE_CONFLICT: could not claim a free row in "${layout.title}" (another export kept writing there)`);
     },
     /** The row at `range`, read back into our header order; null if it is empty. */
     async readRow(target: SheetTarget, range: string): Promise<Cell[] | null> {
