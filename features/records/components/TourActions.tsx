@@ -2,8 +2,8 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Lock, Pencil, Trash2 } from "lucide-react";
-import { deleteTour, setTourStatus, updateTour } from "@/features/records/actions";
+import { Ban, Eye, EyeOff, Lock, Pencil } from "lucide-react";
+import { setTourHidden, setTourStatus, updateTour } from "@/features/records/actions";
 import { TOUR_TYPES, tourCommission } from "@/features/records/logic/tour-commission";
 import type { Locale } from "@/lib/i18n";
 
@@ -25,28 +25,27 @@ export type EditableTour = {
 };
 
 /**
- * Per-tour actions on Booked tours (append-only money rule):
+ * Per-tour actions on Booked tours. Tours are never deleted:
  * - Editar: pending tours only; a paid tour is locked.
- * - Cancelar tour: anyone, any tour not already cancelled; a paid tour's commission
- *   is reversed in Income. Cancelled tours stay in history.
- * - Eliminar (real delete): owner/manager only, pending or cancelled tours that were
- *   never paid (no payment or reversal linked).
+ * - Cancelar tour: any tour not already cancelled; a paid tour's commission is
+ *   reversed in Income.
+ * - Ocultar: only once cancelled - hides it from the list (it stays in the database,
+ *   keeps its income link and stays in the Google Sheet). "Mostrar" brings it back.
  */
-export function TourActions({ tour, hasIncome, canManage, operators, locale }: { tour: EditableTour; hasIncome: boolean; canManage: boolean; operators: string[]; locale: Locale }) {
+export function TourActions({ tour, hidden, operators, locale }: { tour: EditableTour; hidden: boolean; operators: string[]; locale: Locale }) {
   const es = locale === "es";
   const router = useRouter();
   const [pending, start] = useTransition();
   const [dialog, setDialog] = useState<"edit" | "cancel" | null>(null);
   const [error, setError] = useState("");
   const canEdit = tour.status === "pending";
-  const canDelete = canManage && tour.status !== "paid" && !hasIncome;
   const canCancel = tour.status !== "cancelled";
+  const canHide = tour.status === "cancelled" && !hidden;
 
-  function remove() {
-    if (!window.confirm(`${es ? "¿Eliminar este tour?" : "Delete this tour?"}\n${tour.tour_name} · ${tour.guest_name} · ${tour.tour_date}\n${es ? "No tiene ingresos registrados; se borra definitivamente." : "It has no income recorded; it is deleted permanently."}`)) return;
+  function toggleHidden(next: boolean) {
     start(async () => {
-      const result = await deleteTour(tour.id);
-      if (!result.ok) { setError(`${es ? "No se pudo eliminar" : "Could not delete"}: ${result.error}`); return; }
+      const result = await setTourHidden(tour.id, next);
+      if (!result.ok) { setError(`${es ? "No se pudo guardar" : "Could not save"}: ${result.error}`); return; }
       setError("");
       router.refresh();
     });
@@ -58,7 +57,8 @@ export function TourActions({ tour, hasIncome, canManage, operators, locale }: {
         ? <button type="button" className="icon-button subtle" aria-label={`${es ? "Editar" : "Edit"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Editar" : "Edit"} disabled={pending} onClick={() => { setError(""); setDialog("edit"); }}><Pencil size={15} /></button>
         : <button type="button" className="icon-button subtle" aria-label={es ? "Edición bloqueada" : "Editing locked"} title={tour.status === "paid" ? (es ? "Pagado: bloqueado. Use Cancelar tour (anula la comisión)." : "Paid: locked. Use Cancel tour (reverses the commission).") : (es ? "Cancelado: no se edita." : "Cancelled: not editable.")} disabled><Lock size={15} /></button>}
       {canCancel && <button type="button" className="secondary-button compact-button" title={tour.status === "paid" ? (es ? "Pagado: se cancela y se anula la comisión en Ingresos" : "Paid: cancels it and reverses the commission in Income") : (es ? "Queda como Cancelado en el historial" : "Stays in history as Cancelled")} disabled={pending} onClick={() => { setError(""); setDialog("cancel"); }}><Ban size={14} />{es ? "Cancelar tour" : "Cancel tour"}</button>}
-      {canDelete && <button type="button" className="icon-button subtle danger-icon" aria-label={`${es ? "Eliminar" : "Delete"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Eliminar definitivamente (nunca se pagó)" : "Delete permanently (never paid)"} disabled={pending} onClick={remove}><Trash2 size={15} /></button>}
+      {canHide && <button type="button" className="secondary-button compact-button" title={es ? "Ocultar de la lista. No se borra: sigue en la base de datos, en Ingresos y en Google Sheets." : "Hide from the list. Not deleted: it stays in the database, in Income and in Google Sheets."} disabled={pending} onClick={() => toggleHidden(true)}><EyeOff size={14} />{es ? "Ocultar" : "Hide"}</button>}
+      {hidden && <button type="button" className="secondary-button compact-button" title={es ? "Volver a mostrar en la lista" : "Show in the list again"} disabled={pending} onClick={() => toggleHidden(false)}><Eye size={14} />{es ? "Mostrar" : "Show"}</button>}
       {error && <p role="alert" className="form-error">{error}</p>}
       {dialog === "edit" && <EditTourModal tour={tour} operators={operators} locale={locale} onClose={() => setDialog(null)} />}
       {dialog === "cancel" && <CancelTourModal tour={tour} locale={locale} onClose={() => setDialog(null)} />}
@@ -165,8 +165,8 @@ function CancelTourModal({ tour, locale, onClose }: { tour: EditableTour; locale
           <div className="edit-cell-form">
             <p className="full-width"><strong>{tour.tour_name}</strong> · {tour.guest_name} · {tour.tour_date}</p>
             <p className="form-note full-width">{paid
-              ? (es ? `Está pagado, así que no se borra: quedará como Cancelado en el historial y se registrará en Ingresos una anulación de la comisión (${money(tour.currency, commission)}).` : `It is paid, so it is not deleted: it stays in history as Cancelled and a reversal of the commission (${money(tour.currency, commission)}) is recorded in Income.`)
-              : (es ? "Tuvo ingresos registrados antes, así que no se borra: quedará como Cancelado en el historial." : "It had income recorded before, so it is not deleted: it stays in history as Cancelled.")}</p>
+              ? (es ? `Quedará como Cancelado y se registrará en Ingresos una anulación de la comisión (${money(tour.currency, commission)}). Después podrá ocultarlo de la lista (no se borra).` : `It becomes Cancelled and a reversal of the commission (${money(tour.currency, commission)}) is recorded in Income. You can then hide it from the list (it is not deleted).`)
+              : (es ? "Quedará como Cancelado. Después podrá ocultarlo de la lista (no se borra)." : "It becomes Cancelled. You can then hide it from the list (it is not deleted).")}</p>
             <label className="full-width">{es ? "Motivo" : "Reason"}<input name="reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required={paid} /></label>
             {error && <p role="alert" className="form-error full-width">{error}</p>}
           </div>

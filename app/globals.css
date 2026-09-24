@@ -140,6 +140,8 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .row-actions { display: flex; gap: .3rem; }
 .tour-actions { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
 .tour-actions .modal-backdrop { white-space: normal; text-align: left; }
+.board-table tr.tour-hidden td { color: var(--muted); background: #faf6f4; }
+.hidden-toggle.active { background: var(--blush); border-color: var(--wine); color: var(--wine); }
 .tour-actions .form-error { flex-basis: 100%; margin: .2rem 0 0; white-space: normal; }
 .compact-button { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .6rem; font-size: .75rem; }
 .icon-button.danger-icon { color: #8f3b3b; }

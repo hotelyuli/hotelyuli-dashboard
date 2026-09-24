@@ -1,5 +1,5 @@
 begin;
--- Edit / delete tours from Booked tours.
+-- Edit tours from Booked tours (tours are never hard-deleted; cancelled tours can be hidden, 0030).
 -- 1) Any change to a field exported to the Tours sheet (not only status, as in 0027)
 --    re-queues the tour, and so does a delete (the export then clears its sheet row).
 create or replace function public.requeue_tour_for_sheets() returns trigger
@@ -25,19 +25,4 @@ revoke all on function public.requeue_tour_for_sheets() from public;
 drop trigger if exists tour_bookings_requeue_sheets on public.tour_bookings;
 create trigger tour_bookings_requeue_sheets after update or delete on public.tour_bookings
 for each row execute function public.requeue_tour_for_sheets();
-
--- 2) A real delete: owner/manager only, and only for a pending or cancelled tour that
---    was never paid (no payment or reversal linked). Paid tours are cancelled instead
---    (status cancelled + income reversal), which any reception user can do.
-drop policy if exists tour_bookings_delete on public.tour_bookings;
-create policy tour_bookings_delete on public.tour_bookings for delete to authenticated
-using (
-  hotel_id = public.current_hotel_id()
-  and public.current_app_role() in ('owner', 'manager')
-  and status in ('pending', 'cancelled')
-  and not exists (
-    select 1 from public.income_entries i
-    where i.hotel_id = tour_bookings.hotel_id and i.source_type = 'tour' and i.source_id = tour_bookings.id
-  )
-);
 commit;

@@ -219,27 +219,24 @@ export async function updateTour(formData: FormData): Promise<ActionResult> {
 }
 
 /**
- * Real delete: owner/manager only, and only for a pending or cancelled tour that was
- * never paid (no payment or reversal linked). Enforced by the RLS policy from migration
- * 0029 as well; a paid tour is cancelled instead (setTourStatus -> reversal), which any
- * reception user can do. Its sheet row is cleared by the export.
+ * Hide (or show again) a tour on Booked tours. Tours are never deleted: only a
+ * CANCELLED tour can be hidden (also enforced by the 0030 check constraint). It stays
+ * in tour_bookings with its income link (the cancellation's reversal) and stays in
+ * the Google Sheet - hiding is not a sheet column, so nothing is re-synced.
  */
-export async function deleteTour(id: string): Promise<ActionResult> {
-  return runAction("deleteTour", async () => {
+export async function setTourHidden(id: string, hidden: boolean): Promise<ActionResult> {
+  return runAction("setTourHidden", async () => {
     const { supabase, profile } = await authorizeWrite();
-    if (!["owner", "manager"].includes(profile.role)) throw new Error("NOT_AUTHORIZED: only an owner or manager can delete tours - use Cancelar tour");
     const tourId = z.string().uuid().parse(id);
-    const [{ data: tour, error: tourError }, { count, error: incomeError }] = await Promise.all([
-      supabase.from("tour_bookings").select("id, status").eq("id", tourId).eq("hotel_id", profile.hotel_id).single(),
-      supabase.from("income_entries").select("id", { count: "exact", head: true }).eq("hotel_id", profile.hotel_id).eq("source_type", "tour").eq("source_id", tourId)
-    ]);
+    const { data: tour, error: tourError } = await supabase.from("tour_bookings").select("id, status").eq("id", tourId).eq("hotel_id", profile.hotel_id).single();
     if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? tourId}`);
-    if (incomeError) throw new Error(`INCOME_CHECK_FAILED: ${incomeError.message}`);
-    if (!["pending", "cancelled"].includes(tour.status) || (count ?? 0) > 0) throw new Error("HAS_INCOME: this tour was paid - use Cancelar tour (reversal) instead of deleting");
-    const { data, error } = await supabase.from("tour_bookings").delete().eq("id", tourId).eq("hotel_id", profile.hotel_id).select("id");
-    if (error) throw new Error(`DELETE_FAILED: ${error.message}`);
-    if (!data?.length) throw new Error("NOT_DELETED: deleting tours is not enabled yet (run migration 0029)");
-    after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/dashboard"); revalidatePath("/operations");
+    if (hidden && tour.status !== "cancelled") throw new Error("NOT_CANCELLED: cancel the tour first, then it can be hidden");
+    const { data: updated, error } = await supabase.from("tour_bookings")
+      .update({ hidden, hidden_at: hidden ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+      .eq("id", tourId).eq("hotel_id", profile.hotel_id).select("id").single();
+    if (error?.code === "42703") throw new Error("NOT_ENABLED: hiding tours needs migration 0030");
+    if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "tour not updated"}`);
+    revalidatePath("/tours");
   });
 }
 
