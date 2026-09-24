@@ -6,5 +6,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+  // Icons and the web app manifest must load without a session (phones fetch them without cookies).
+  matcher: ["/((?!api|_next/static|_next/image|favicon.svg|manifest.webmanifest|.*\\.(?:svg|png|ico|jpg|jpeg|gif|webp)$).*)"]
 };
