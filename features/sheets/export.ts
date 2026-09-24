@@ -37,16 +37,20 @@ export function supabaseOutboxStore(db: Admin): OutboxStore {
       if (error) throw new Error(`INCOME_LOAD_FAILED: ${error.message}`);
       if (!income) return null;
       let reservation: { booking_channel: string | null; arrival_date: string } | null = null;
+      let boardChannel: string | null = null;
       if (income.source_type === "accommodation" && income.source_id) {
         // The ledger links a stay by reservation id, or by the board row when it had no reservation.
         const direct = await db.from("reservations").select("booking_channel, arrival_date").eq("id", income.source_id).maybeSingle();
         reservation = direct.data;
         if (!reservation) {
-          const row = await db.from("daily_operations").select("reservation_id").eq("id", income.source_id).maybeSingle();
+          const row = await db.from("daily_operations").select("reservation_id, booking_channel").eq("id", income.source_id).maybeSingle();
+          boardChannel = row.data?.booking_channel ?? null;
           if (row.data?.reservation_id) reservation = (await db.from("reservations").select("booking_channel, arrival_date").eq("id", row.data.reservation_id).maybeSingle()).data;
         }
       }
-      return { income: income as IncomeRecord, enrichment: { bookingChannel: reservation?.booking_channel ?? null, reservationDate: reservation?.arrival_date ?? null } };
+      // Channel as stored (reservation first, else the one set on the board row); never the internal category.
+      const bookingChannel = reservation?.booking_channel?.trim() || boardChannel?.trim() || null;
+      return { income: income as IncomeRecord, enrichment: { bookingChannel, reservationDate: reservation?.arrival_date ?? null } };
     },
     async saveLocation(id, range, values) {
       const { error } = await db.from("google_sheets_outbox").update({ sheet_range: range, sheet_values: values as unknown as Json }).eq("id", id);

@@ -86,7 +86,8 @@ export function incomeRow(income: IncomeRecord, enrichment: IncomeEnrichment): C
     ? `Anulación / Reversal${income.reason ? `: ${income.reason}` : ""}${income.reference_note ? ` · ${income.reference_note}` : ""}`
     : [income.reference_note, income.room_number ? `Room ${income.room_number.replace(/^Habitaci[oó]n\s*/i, "")}` : null].filter(Boolean).join(" · ");
   return [
-    textCell(enrichment.bookingChannel || income.category),
+    // CATEGORIES = the booking channel exactly as stored (never the internal category); blank when none.
+    textCell(enrichment.bookingChannel ?? ""),
     moneyCell(income.currency, reversal ? -amount : amount),
     income.operation_date,
     textCell(description),

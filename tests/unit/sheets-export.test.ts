@@ -15,11 +15,15 @@ describe("row mapping (exact sheet columns)", () => {
     expect(tourRow({ ...tour, status: "cancelled" })[6]).toBe("Cancelled");
   });
 
-  it("income: booking channel as CATEGORIES when known, reservation date from the linked reservation", () => {
+  it("income: CATEGORIES is the stored booking channel, reservation date from the linked reservation", () => {
     expect(INCOME_HEADERS).toHaveLength(7);
     expect(incomeRow(income, { bookingChannel: "Booking.com", reservationDate: "2026-09-20" })).toEqual(["Booking.com", 150, "2026-09-24", "Room 5", "Ana Pérez", "Visa", "2026-09-20"]);
-    expect(incomeRow({ ...income, room_number: null, reference_note: "Whale Watching · 2026-09-25" }, { bookingChannel: null, reservationDate: null }))
-      .toEqual(["Accommodation", 150, "2026-09-24", "Whale Watching · 2026-09-25", "Ana Pérez", "Visa", ""]);
+    expect(incomeRow(income, { bookingChannel: "Simple Booking", reservationDate: null })[0]).toBe("Simple Booking");
+  });
+
+  it("income: CATEGORIES is blank (never the internal category) when there is no channel", () => {
+    expect(incomeRow({ ...income, category: "Tour commission", room_number: null, reference_note: "Whale Watching · 2026-09-25" }, { bookingChannel: null, reservationDate: null }))
+      .toEqual(["", 150, "2026-09-24", "Whale Watching · 2026-09-25", "Ana Pérez", "Visa", ""]);
   });
 
   it("reversals are negative rows with the reason", () => {
