@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activePayment, planSettlement, settledTotals, type LedgerEntry } from "@/features/records/logic/settlement";
-import { applySettlement, type NewIncomeRow, type PaymentDetails, type SettlementLedger, type SettlementSource } from "@/features/records/services/settlement";
+import { applySettlement, settleWithCorrection, type NewIncomeRow, type PaymentDetails, type SettlementLedger, type SettlementSource } from "@/features/records/services/settlement";
 
 type Row = NewIncomeRow & { id: string; source: SettlementSource };
 
@@ -135,5 +135,37 @@ describe("settledTotals (Income page totals)", () => {
       { amount: 5000, currency: "CRC", paid: true },
       { amount: 999, currency: "CRC", paid: false }
     ])).toEqual({ USD: 80, CRC: 5000 });
+  });
+});
+
+describe("settleWithCorrection (editing a paid tour)", () => {
+  it("a changed commission on a paid tour appends a reversal + a new payment; nothing is rewritten", async () => {
+    const { ledger, rows } = memoryLedger();
+    await applySettlement({ ledger, source: tour, wantPaid: true, payment: commission });
+    const result = await settleWithCorrection({ ledger, source: tour, wantPaid: true, payment: { ...commission, amount: 30 } });
+    expect(result).toEqual({ action: "corrected", reversed: 20 });
+    expect(rows.map((row) => [row.entryType, row.amount, row.settlementSeq, row.reversesEntryId])).toEqual([
+      ["payment", 20, 1, null], ["reversal", 20, 1, "income-1"], ["payment", 30, 2, null]
+    ]);
+    expect(rows[1].reason).toBe("Corrección / Correction: USD 20.00 → USD 30.00");
+    expect(settledTotals(rows.map((row) => ({ amount: row.amount, currency: row.currency, paid: true, entryType: row.entryType })))).toEqual({ USD: 30, CRC: 0 });
+  });
+
+  it("same amount: no income rows; not yet paid: a normal payment; leaving paid: a reversal with the reason", async () => {
+    const { ledger, rows } = memoryLedger();
+    expect((await settleWithCorrection({ ledger, source: tour, wantPaid: false, payment: commission })).action).toBe("none");
+    expect((await settleWithCorrection({ ledger, source: tour, wantPaid: true, payment: commission })).action).toBe("paid");
+    expect((await settleWithCorrection({ ledger, source: tour, wantPaid: true, payment: { ...commission, amount: 20.001 } })).action).toBe("none");
+    expect((await settleWithCorrection({ ledger, source: tour, wantPaid: false, payment: commission, reason: "Tour cancelado" })).action).toBe("reversed");
+    expect(rows.map((row) => row.entryType)).toEqual(["payment", "reversal"]);
+    await expect(settleWithCorrection({ ledger, source: tour, wantPaid: true, payment: commission }).then(() => settleWithCorrection({ ledger, source: tour, wantPaid: false, payment: commission }))).rejects.toThrow("REASON_REQUIRED");
+  });
+
+  it("a retry after a failure between the two rows only adds the missing payment", async () => {
+    const { ledger, rows } = memoryLedger();
+    await applySettlement({ ledger, source: tour, wantPaid: true, payment: commission });
+    await applySettlement({ ledger, source: tour, wantPaid: false, reason: "Corrección" }); // crashed right after the reversal
+    await settleWithCorrection({ ledger, source: tour, wantPaid: true, payment: { ...commission, amount: 30 } });
+    expect(rows.map((row) => [row.entryType, row.amount])).toEqual([["payment", 20], ["reversal", 20], ["payment", 30]]);
   });
 });

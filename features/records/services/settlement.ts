@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/db/database.types";
-import { planSettlement, type LedgerEntry } from "@/features/records/logic/settlement";
+import { activePayment, planSettlement, type LedgerEntry } from "@/features/records/logic/settlement";
 
 export type SettlementSource = { type: "tour" | "accommodation"; id: string };
 
@@ -131,4 +131,39 @@ export function supabaseLedger(params: { supabase: SupabaseClient<Database>; hot
       return data.id;
     }
   };
+}
+
+const cents = (value: number) => Math.round(value * 100);
+const money = (currency: string, amount: number) => `${currency} ${amount.toFixed(2)}`;
+
+/**
+ * Like applySettlement, plus corrections: when the source stays paid but the amount
+ * (or currency) changed, the income in force is reversed and a new payment is added
+ * for the corrected amount - two appended rows, nothing rewritten, so the audit trail
+ * shows both. Safe to retry: after a partial failure the next run only adds the payment.
+ */
+export async function settleWithCorrection(params: {
+  ledger: SettlementLedger;
+  source: SettlementSource;
+  wantPaid: boolean;
+  payment: PaymentDetails;
+  /** Required when leaving paid (cancel / back to pending). */
+  reason?: string;
+  /** Note appended to the automatic correction reason. */
+  note?: string;
+}): Promise<{ action: SettlementResult["action"] | "corrected"; reversed: number | null }> {
+  const { ledger, source, wantPaid, payment } = params;
+  if (wantPaid) {
+    const entries = await ledger.load(source);
+    const active = activePayment(entries);
+    const current = active ? entries.find((entry) => entry.id === active.id) : undefined;
+    if (current && (cents(current.amount) !== cents(payment.amount) || current.currency !== payment.currency)) {
+      const reason = `Corrección / Correction: ${money(current.currency, current.amount)} → ${money(payment.currency, payment.amount)}${params.note?.trim() ? ` · ${params.note.trim()}` : ""}`.slice(0, 500);
+      await applySettlement({ ledger, source, wantPaid: false, reason });
+      await applySettlement({ ledger, source, wantPaid: true, payment });
+      return { action: "corrected", reversed: current.amount };
+    }
+  }
+  const result = await applySettlement({ ledger, source, wantPaid, payment, reason: params.reason });
+  return { action: result.action, reversed: null };
 }

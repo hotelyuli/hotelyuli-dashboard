@@ -1,5 +1,5 @@
-import { incomeRow, monthTabName, shouldExportIncome, tourRow, tourRowKey, INCOME_HEADERS, TOURS_HEADERS, type Cell, type IncomeEnrichment, type IncomeRecord, type TourRecord } from "./rows";
-import type { SheetTarget } from "./google";
+import { incomeRow, monthTabName, shouldExportIncome, tabKey, tourRow, tourRowKey, INCOME_HEADERS, TOURS_HEADERS, type Cell, type IncomeEnrichment, type IncomeRecord, type TourRecord } from "./rows";
+import { parseRowRange, type SheetTarget } from "./google";
 
 // Flushes google_sheets_outbox to the two spreadsheets. Storage and Google are
 // injected so the flow is unit-testable; production wiring is in export.ts.
@@ -50,19 +50,30 @@ export function targetsFromEnv(env: NodeJS.ProcessEnv = process.env): SheetsTarg
   };
 }
 
-/** A tour row is updated in place when we know where it is (and it still holds that tour); otherwise appended. */
+/** Where the tour's row is now: its stored range if it still holds the tour, else re-found in that tab (rows sorted / moved by hand). */
+async function locateTourRow(item: OutboxItem, sheets: SheetsWriter, target: SheetTarget): Promise<string | null> {
+  if (!item.sheet_range || !item.sheet_values) return null;
+  const expectedKey = tourRowKey(item.sheet_values);
+  const current = await sheets.readRow(target, item.sheet_range);
+  if (current && tourRowKey(current) === expectedKey) return item.sheet_range;
+  return sheets.findTourRow(target, parseRowRange(item.sheet_range).tab, expectedKey);
+}
+
+/** Our columns emptied (COMPROBANTE # and other hand-filled columns are not touched). */
+const blankTourRow = (): Cell[] => TOURS_HEADERS.map(() => "");
+
+/**
+ * A tour row is updated in place when we know where it is (and it still holds that tour);
+ * otherwise appended. If an edit moved the tour to another month, the old row is
+ * cleared and the tour is written to the new month's tab.
+ */
 async function writeTour(item: OutboxItem, row: Cell[], sheets: SheetsWriter, target: SheetTarget, tab: string): Promise<string> {
-  if (item.sheet_range && item.sheet_values) {
-    const expectedKey = tourRowKey(item.sheet_values);
-    const current = await sheets.readRow(target, item.sheet_range);
-    const range = current && tourRowKey(current) === expectedKey
-      ? item.sheet_range
-      : await sheets.findTourRow(target, tab, expectedKey); // rows were sorted / moved by hand
-    if (range) {
-      await sheets.update(target, range, row);
-      return range;
-    }
+  const range = await locateTourRow(item, sheets, target);
+  if (range && tabKey(parseRowRange(range).tab) === tabKey(tab)) {
+    await sheets.update(target, range, row);
+    return range;
   }
+  if (range) await sheets.update(target, range, blankTourRow());
   return sheets.append(target, tab, row);
 }
 
@@ -81,7 +92,13 @@ export async function flushSheetsOutbox(deps: { store: OutboxStore; sheets: Shee
     try {
       if (item.entity_type === "tour") {
         const tour = await store.loadTour(item.entity_id);
-        if (!tour) { await store.markSkipped(item.id, "SKIPPED: tour no longer exists"); result.skipped += 1; record(item, "skipped", "tour no longer exists"); continue; }
+        if (!tour) {
+          // Deleted in YuliOS (only unpaid tours can be): clear the row it had written.
+          const range = await locateTourRow(item, sheets, targets.tours);
+          if (range) await sheets.update(targets.tours, range, blankTourRow());
+          const detail = range ? `tour deleted - sheet row ${range} cleared` : "tour no longer exists";
+          await store.markSkipped(item.id, `SKIPPED: ${detail}`); result.skipped += 1; record(item, "skipped", detail); continue;
+        }
         const row = tourRow(tour);
         // Monthly tab by TOUR DATE, e.g. SEPTIEMBRE2026.
         const range = await writeTour(item, row, sheets, targets.tours, monthTabName(tour.tour_date));

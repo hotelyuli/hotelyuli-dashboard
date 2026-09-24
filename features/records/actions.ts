@@ -9,7 +9,7 @@ import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can, type AppRole } from "@/features/auth/logic/permissions";
 import { resolveRoomTokens } from "@/features/operations/logic/room-resolver";
-import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
+import { applySettlement, settleWithCorrection, supabaseLedger } from "@/features/records/services/settlement";
 import { TOUR_INCOME_CATEGORY, TOUR_INCOME_METHOD } from "./logic/tour-commission";
 import { runAction, type ActionResult } from "@/lib/action-result";
 
@@ -162,6 +162,82 @@ async function saveTourStatus(formData: FormData) {
   const { data: updated, error } = await supabase.from("tour_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", tour.id).eq("hotel_id", profile.hotel_id).select("id").single();
   if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "tour not updated"}`);
   after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard"); revalidatePath("/operations");
+}
+
+const tourEditSchema = z.object({
+  id: z.string().uuid(),
+  guestName: z.string().trim().min(1).max(120), roomNumber: z.string().trim().max(20),
+  operatorName: z.string().trim().min(1).max(120), tourName: z.string().trim().min(1).max(120),
+  tourDate: z.string().date(), adults: z.coerce.number().int().min(0).max(500), children: z.coerce.number().int().min(0).max(500),
+  totalPrice: z.coerce.number().min(0).max(1_000_000_000), commission: z.coerce.number().min(0).max(1_000_000_000),
+  status: z.enum(["paid", "pending", "cancelled"]),
+  reason: z.string().trim().max(500).default("")
+}).refine((d) => d.commission <= d.totalPrice, { message: "COMMISSION_ABOVE_PRICE" });
+
+/**
+ * Edit a tour from Booked tours. Money follows the append-only ledger:
+ * - stays paid with a different commission -> reversal of the old income + a new payment;
+ * - becomes paid -> one payment; leaves paid -> a reversal with the reason.
+ * The ledger is written before the tour, so a retry heals a failure in between.
+ * Any change to a sheet column re-queues the tour for Google Sheets (trigger, migration 0029).
+ */
+export async function updateTour(formData: FormData): Promise<ActionResult> {
+  return runAction("updateTour", async () => {
+    const { supabase, user, profile, operationDate } = await authorizeWrite();
+    const parsed = tourEditSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error(`INVALID_INPUT: ${parsed.error.issues.map((issue) => issue.message).join(", ")}`);
+    const d = parsed.data;
+    const { data: tour, error: tourError } = await supabase.from("tour_bookings").select("id, status, currency").eq("id", d.id).eq("hotel_id", profile.hotel_id).single();
+    if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? d.id}`);
+    const commission = Math.round(d.commission * 100) / 100;
+
+    await settleWithCorrection({
+      ledger: supabaseLedger({ supabase, hotelId: profile.hotel_id, userId: user.id, operationDate }),
+      source: { type: "tour", id: tour.id },
+      wantPaid: d.status === "paid",
+      payment: {
+        amount: commission,
+        currency: tour.currency as "USD" | "CRC",
+        paymentMethod: TOUR_INCOME_METHOD,
+        category: TOUR_INCOME_CATEGORY,
+        guestName: d.guestName,
+        roomNumber: d.roomNumber || null,
+        referenceNote: `${d.tourName} · ${d.tourDate} · ${d.operatorName}`
+      },
+      reason: d.reason
+    });
+
+    const { data: updated, error } = await supabase.from("tour_bookings").update({
+      guest_name: d.guestName, room_number: d.roomNumber || null, operator_name: d.operatorName, tour_name: d.tourName,
+      tour_date: d.tourDate, adults: d.adults, children: d.children, total_price: d.totalPrice, commission_amount: commission,
+      status: d.status, updated_at: new Date().toISOString()
+    }).eq("id", tour.id).eq("hotel_id", profile.hotel_id).select("id").single();
+    if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "tour not updated"}`);
+    after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard"); revalidatePath("/operations");
+  });
+}
+
+/**
+ * Real delete, only for a tour that never created income (not paid, no payment or
+ * reversal linked). Enforced by the RLS policy from migration 0029 as well; a paid
+ * tour is cancelled instead (setTourStatus -> reversal). Its sheet row is cleared.
+ */
+export async function deleteTour(id: string): Promise<ActionResult> {
+  return runAction("deleteTour", async () => {
+    const { supabase, profile } = await authorizeWrite();
+    const tourId = z.string().uuid().parse(id);
+    const [{ data: tour, error: tourError }, { count, error: incomeError }] = await Promise.all([
+      supabase.from("tour_bookings").select("id, status").eq("id", tourId).eq("hotel_id", profile.hotel_id).single(),
+      supabase.from("income_entries").select("id", { count: "exact", head: true }).eq("hotel_id", profile.hotel_id).eq("source_type", "tour").eq("source_id", tourId)
+    ]);
+    if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? tourId}`);
+    if (incomeError) throw new Error(`INCOME_CHECK_FAILED: ${incomeError.message}`);
+    if (tour.status === "paid" || (count ?? 0) > 0) throw new Error("HAS_INCOME: this tour created income - use Cancelar tour (reversal) instead of deleting");
+    const { data, error } = await supabase.from("tour_bookings").delete().eq("id", tourId).eq("hotel_id", profile.hotel_id).select("id");
+    if (error) throw new Error(`DELETE_FAILED: ${error.message}`);
+    if (!data?.length) throw new Error("NOT_DELETED: deleting tours is not enabled yet (run migration 0029)");
+    after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/dashboard"); revalidatePath("/operations");
+  });
 }
 
 const incomeSchema = z.object({

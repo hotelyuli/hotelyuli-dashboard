@@ -275,7 +275,7 @@ describe("flushSheetsOutbox", () => {
     const sheetRows = new Map<string, Cell[]>();
     let next = 10;
     const sheets: SheetsWriter = {
-      append: vi.fn(async (target, _tab: string, row: Cell[]) => { const range = `'${target.spreadsheetId}'!A${next}:I${next}`; next += 1; sheetRows.set(range, row); return range; }),
+      append: vi.fn(async (_target, tab: string, row: Cell[]) => { const range = `'${tab}'!A${next}:I${next}`; next += 1; sheetRows.set(range, row); return range; }),
       readRow: vi.fn(async (_target, range: string) => sheetRows.get(range) ?? null),
       findTourRow: vi.fn(async () => null),
       update: vi.fn(async (_target, range: string, row: Cell[]) => { sheetRows.set(range, row); })
@@ -288,7 +288,7 @@ describe("flushSheetsOutbox", () => {
     const h = harness([item({})], { tours: { t1: tour } });
     const result = await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
     expect(result).toMatchObject({ claimed: 1, sent: 1, failed: 0 });
-    expect(h.state.get("o1")).toMatchObject({ status: "sent", sheet_range: "'T'!A10:I10" });
+    expect(h.state.get("o1")).toMatchObject({ status: "sent", sheet_range: "'SEPTIEMBRE2026'!A10:I10" });
   });
 
   it("routes each row to the monthly tab of its date (TOUR DATE for tours, DATE for income)", async () => {
@@ -299,23 +299,52 @@ describe("flushSheetsOutbox", () => {
   });
 
   it("a tour that became paid updates its existing row instead of adding a duplicate", async () => {
-    const h = harness([item({ sheet_range: "'T'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, status: "paid" } } });
-    h.sheetRows.set("'T'!A10:I10", tourRow(tour));
+    const h = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, status: "paid" } } });
+    h.sheetRows.set("'SEPTIEMBRE2026'!A10:I10", tourRow(tour));
     await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
     expect(h.sheets.append).not.toHaveBeenCalled();
-    expect(h.sheets.update).toHaveBeenCalledWith(targets.tours, "'T'!A10:I10", tourRow({ ...tour, status: "paid" }));
+    expect(h.sheets.update).toHaveBeenCalledWith(targets.tours, "'SEPTIEMBRE2026'!A10:I10", tourRow({ ...tour, status: "paid" }));
   });
 
   it("if the row was moved by hand it is re-found; if it is gone, a new row is appended", async () => {
-    const moved = harness([item({ sheet_range: "'T'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, status: "cancelled" } } });
-    moved.sheetRows.set("'T'!A10:I10", ["2026-09-01", "Other", "Other", "Someone / 1"]);
-    vi.mocked(moved.sheets.findTourRow).mockResolvedValueOnce("'T'!A57:I57");
+    const moved = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, status: "cancelled" } } });
+    moved.sheetRows.set("'SEPTIEMBRE2026'!A10:I10", ["2026-09-01", "Other", "Other", "Someone / 1"]);
+    vi.mocked(moved.sheets.findTourRow).mockResolvedValueOnce("'SEPTIEMBRE2026'!A57:I57");
     await flushSheetsOutbox({ store: moved.store, sheets: moved.sheets, targets });
-    expect(moved.sheets.update).toHaveBeenCalledWith(targets.tours, "'T'!A57:I57", expect.any(Array));
+    expect(moved.sheets.update).toHaveBeenCalledWith(targets.tours, "'SEPTIEMBRE2026'!A57:I57", expect.any(Array));
 
-    const gone = harness([item({ sheet_range: "'T'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: tour } });
+    const gone = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: tour } });
+    vi.mocked(gone.sheets.findTourRow).mockResolvedValueOnce(null);
     await flushSheetsOutbox({ store: gone.store, sheets: gone.sheets, targets });
     expect(gone.sheets.append).toHaveBeenCalledTimes(1);
+  });
+
+  it("an edit that moves the tour to another month clears the old row and writes the new month's tab", async () => {
+    const h = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, tour_date: "2026-10-03" } } });
+    h.sheetRows.set("'SEPTIEMBRE2026'!A10:I10", tourRow(tour));
+    await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
+    expect(h.sheets.update).toHaveBeenCalledWith(targets.tours, "'SEPTIEMBRE2026'!A10:I10", ["", "", "", "", "", "", "", "", ""]);
+    expect(h.sheets.append).toHaveBeenCalledWith(targets.tours, "OCTUBRE2026", tourRow({ ...tour, tour_date: "2026-10-03" }));
+    expect(h.state.get("o1")).toMatchObject({ status: "sent", sheet_range: "'OCTUBRE2026'!A10:I10" });
+  });
+
+  it("an edit within the month (guest, price) updates the same row, found by the old key", async () => {
+    const h = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) })], { tours: { t1: { ...tour, guest_name: "Luis", total_price: 200, commission_amount: 40 } } });
+    h.sheetRows.set("'SEPTIEMBRE2026'!A10:I10", tourRow(tour));
+    await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
+    expect(h.sheets.append).not.toHaveBeenCalled();
+    expect(h.sheets.update).toHaveBeenCalledWith(targets.tours, "'SEPTIEMBRE2026'!A10:I10", tourRow({ ...tour, guest_name: "Luis", total_price: 200, commission_amount: 40 }));
+  });
+
+  it("a deleted tour's sheet row is cleared (our columns only); a never-sent one is just skipped", async () => {
+    const h = harness([item({ sheet_range: "'SEPTIEMBRE2026'!A10:I10", sheet_values: tourRow(tour) }), item({ id: "o2", entity_id: "t2" })]);
+    h.sheetRows.set("'SEPTIEMBRE2026'!A10:I10", tourRow(tour));
+    const result = await flushSheetsOutbox({ store: h.store, sheets: h.sheets, targets });
+    expect(h.sheets.update).toHaveBeenCalledWith(targets.tours, "'SEPTIEMBRE2026'!A10:I10", ["", "", "", "", "", "", "", "", ""]);
+    expect(h.sheets.append).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ skipped: 2, failed: 0 });
+    expect(h.state.get("o1")).toMatchObject({ status: "skipped", last_error: "SKIPPED: tour deleted - sheet row 'SEPTIEMBRE2026'!A10:I10 cleared" });
+    expect(h.state.get("o2")).toMatchObject({ status: "skipped", last_error: "SKIPPED: tour no longer exists" });
   });
 
   it("appends settled income, skips unpaid income, and never writes income twice", async () => {

@@ -8,3 +8,6 @@ export function tourCommission(total: number): number {
 /** A paid tour books only the hotel's commission as income; the travel office collects the tour price. */
 export const TOUR_INCOME_CATEGORY = "Tour commission";
 export const TOUR_INCOME_METHOD = "Agency";
+
+/** Tour types offered in Register tour and Edit tour (free text is allowed via "Other"). */
+export const TOUR_TYPES = ["Whale Watching", "Isla del Caño Snorkeling", "Corcovado", "Cataratas Nauyaca", "Alturas Wildlife Sanctuary", "Manglar de Sierpe", "Transfer", "Sound Healing", "Other"] as const;

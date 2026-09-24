@@ -136,6 +136,12 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .status-badge.status-out_of_service { background: #f8e4e3; color: #9d3333; border-color: #f0c6c4; }
 .housekeeping-note { display: block; color: var(--muted); font-size: .68rem; margin-top: .2rem; }
 .row-actions { display: flex; gap: .3rem; }
+.tour-actions { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.tour-actions .modal-backdrop { white-space: normal; text-align: left; }
+.tour-actions .form-error { flex-basis: 100%; margin: .2rem 0 0; white-space: normal; }
+.compact-button { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .6rem; font-size: .75rem; }
+.icon-button.danger-icon { color: #8f3b3b; }
+.form-note { margin: 0; padding: .6rem .75rem; border-radius: 8px; background: var(--blush); font-size: .8rem; white-space: normal; }
 .row-menu { position: fixed; z-index: 60; min-width: 190px; display: grid; padding: .3rem; background: white; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(40, 20, 25, .16); }
 .row-menu button { display: flex; align-items: center; gap: .55rem; padding: .55rem .7rem; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: .82rem; text-align: left; cursor: pointer; }
 .row-menu button:hover, .row-menu button:focus-visible { background: var(--blush); outline: none; }
