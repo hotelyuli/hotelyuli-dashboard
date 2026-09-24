@@ -12,6 +12,7 @@ import {
   type RoomOption
 } from "@/features/operations/components/RoomBoardTable";
 import { settledTotals } from "@/features/records/logic/settlement";
+import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 
 export const metadata = { title: "Dashboard" };
 
@@ -24,7 +25,7 @@ export default async function DashboardPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }, { data: events, error: eventError }, { data: tours, error: tourError }, { data: income }] = await Promise.all([
+  const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }, { data: events, error: eventError }, { data: tours, error: tourError }, { data: income }, { data: boardTourBookings }] = await Promise.all([
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
     supabase
@@ -44,7 +45,8 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false }).limit(5),
     supabase.from("shift_events").select("id,event_time,room_area,description,status").eq("hotel_id", hotelId).eq("operation_date", operationDate).order("event_time", { ascending: false }).limit(4),
     supabase.from("tour_bookings").select("status").eq("hotel_id", hotelId).eq("tour_date", operationDate).neq("status", "cancelled"),
-    supabase.from("income_entries").select("amount, currency, paid, entry_type").eq("hotel_id", hotelId).eq("operation_date", operationDate)
+    supabase.from("income_entries").select("amount, currency, paid, entry_type").eq("hotel_id", hotelId).eq("operation_date", operationDate),
+    supabase.from("tour_bookings").select("id, room_number, guest_name, tour_name, tour_date, operation_date, status").eq("hotel_id", hotelId).neq("status", "cancelled").or(boardToursFilter(operationDate))
   ]);
 
   if (taskError || eventError || tourError) throw new Error("TASKS_LOAD_FAILED");
@@ -60,9 +62,11 @@ export default async function DashboardPage() {
   const pendingCrc = pending.filter((row) => row.currency === "CRC").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const opsByRoom = new Map(rows.map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
+  const toursForUnit = toursByUnit(boardTourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
   const boardRows: BoardRow[] = (rooms ?? []).map((room) => {
     const operation = opsByRoom.get(room.id);
     return {
+      tours: toursForUnit.get(room.unit_code) ?? [],
       rowId: operation?.id ?? null,
       roomId: room.id,
       roomLabel: room.display_name,

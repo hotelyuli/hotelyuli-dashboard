@@ -3,6 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { requireSession } from "@/features/auth/logic/guards";
 import { RoomBoardTable, type BoardRow, type RoomOption } from "@/features/operations/components/RoomBoardTable";
+import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 
 export const metadata = { title: "Operations" };
 
@@ -14,7 +15,7 @@ export default async function OperationsPage() {
   const hotelId = profile?.hotel_id ?? "";
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
-  const [{ data: rooms }, { data: operations }] = await Promise.all([
+  const [{ data: rooms }, { data: operations }, { data: tourBookings }] = await Promise.all([
     supabase
       .from("rooms")
       .select("id, display_name, room_number, sort_order, active, unit_code")
@@ -26,15 +27,18 @@ export default async function OperationsPage() {
         "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
       )
       .eq("hotel_id", hotelId)
-      .eq("operation_date", operationDate)
+      .eq("operation_date", operationDate),
+    supabase.from("tour_bookings").select("id, room_number, guest_name, tour_name, tour_date, operation_date, status").eq("hotel_id", hotelId).neq("status", "cancelled").or(boardToursFilter(operationDate))
   ]);
 
   const opsByRoom = new Map((operations ?? []).map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
 
+  const toursForUnit = toursByUnit(tourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
   const rows: BoardRow[] = (rooms ?? []).map((room) => {
     const op = opsByRoom.get(room.id);
     return {
+      tours: toursForUnit.get(room.unit_code) ?? [],
       rowId: op?.id ?? null,
       roomId: room.id,
       roomLabel: room.display_name,

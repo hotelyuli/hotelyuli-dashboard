@@ -1,13 +1,15 @@
 "use client";
 import { PaymentMethodOptions } from "@/components/PaymentMethodOptions";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { History, MoveRight, Palmtree, Pencil, Repeat } from "lucide-react";
+import { History, MoreVertical, MoveRight, Palmtree, Pencil, Repeat } from "lucide-react";
+import { formatInTimeZone } from "date-fns-tz";
 import { TourBookingDialog } from "@/features/records/components/RegisterForms";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
 import { BED_SETUPS, HOUSEKEEPERS, bedSetupLabel, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
+import type { BoardTour } from "@/features/operations/logic/board-tours";
 
 export type BoardRow = {
   rowId: string | null;
@@ -38,6 +40,8 @@ export type BoardRow = {
   bedSetup: BedSetup | null;
   /** "HH:MM" (Postgres time trimmed to minutes) or null. */
   breakfastToGoTime: string | null;
+  /** Tours linked to this room: booked today, or taking place today or later (not cancelled). */
+  tours: BoardTour[];
 };
 
 export type RoomOption = { id: string; displayName: string };
@@ -111,15 +115,21 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
                 <td>{row.carPlate ?? "—"}</td>
                 <td>{row.bookingChannel ?? "—"}</td>
                 <td>{row.departureDate ?? "—"}</td>
-                <td>—</td>
+                <td><BoardToursCell tours={row.tours} locale={locale} /></td>
                 <td className="notes-cell">{row.notes ?? "—"}</td>
                 <td>
                   <div className="row-actions">
                     <button className="icon-button subtle" aria-label={locale === "es" ? `Reservar tour · ${row.roomLabel}` : `Book tour · ${row.roomLabel}`} title={locale === "es" ? "Reservar tour" : "Book tour"} onClick={() => setBookingTour(row)}><Palmtree size={15} /></button>
                     <button className="icon-button subtle" aria-label={t.editCell} disabled={!row.rowId} onClick={() => setEditing(row)}><Pencil size={15} /></button>
-                    <button className="icon-button subtle" aria-label={t.moveGuest} disabled={!row.rowId} onClick={() => setMoving(row)}><MoveRight size={15} /></button>
-                    <button className="icon-button subtle" aria-label={t.swapRooms} disabled={!row.rowId} onClick={() => setSwapping(row)}><Repeat size={15} /></button>
-                    <button className="icon-button subtle" aria-label={t.viewHistory} disabled={!row.rowId} onClick={() => setViewingHistory(row)}><History size={15} /></button>
+                    <RowActionsMenu
+                      label={locale === "es" ? `Más acciones · ${row.roomLabel}` : `More actions · ${row.roomLabel}`}
+                      disabled={!row.rowId}
+                      items={[
+                        { label: t.moveGuest, icon: <MoveRight size={15} />, onSelect: () => setMoving(row) },
+                        { label: t.swapRooms, icon: <Repeat size={15} />, onSelect: () => setSwapping(row) },
+                        { label: t.viewHistory, icon: <History size={15} />, onSelect: () => setViewingHistory(row) }
+                      ]}
+                    />
                   </div>
                 </td>
               </tr>
@@ -365,5 +375,81 @@ function HistoryModal({ row, t, locale, onClose }: { row: BoardRow; t: Dict; loc
         </footer>
       </section>
     </div>
+  );
+}
+
+function BoardToursCell({ tours, locale }: { tours: BoardTour[]; locale: Locale }) {
+  if (!tours.length) return <>—</>;
+  const es = locale === "es";
+  const today = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
+  return (
+    <div className="board-tours">
+      {tours.map((tour) => (
+        <span key={tour.id} className={`board-tour board-tour-${tour.status}`}>
+          {tour.tourName}
+          <small>{tour.tourDate === today ? (es ? "Hoy" : "Today") : `${tour.tourDate.slice(8, 10)}/${tour.tourDate.slice(5, 7)}`}{tour.status === "paid" ? ` · ${es ? "Pagado" : "Paid"}` : ""}</small>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type RowAction = { label: string; icon: React.ReactNode; onSelect: () => void };
+
+/**
+ * "⋮" menu for the less frequent row actions. The menu is position: fixed from the
+ * button's rect, so the table's horizontal scroll container cannot clip it.
+ */
+function RowActionsMenu({ label, disabled, items }: { label: string; disabled: boolean; items: RowAction[] }) {
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = position !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const close = () => setPosition(null);
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !buttonRef.current?.contains(target)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { close(); buttonRef.current?.focus(); return; }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      buttons[(index + (event.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length]?.focus();
+      event.preventDefault();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (open) { setPosition(null); return; }
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" className="icon-button subtle" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}><MoreVertical size={15} /></button>
+      {open && (
+        <div ref={menuRef} className="row-menu" role="menu" aria-label={label} style={{ top: position.top, right: position.right }}>
+          {items.map((item) => (
+            <button key={item.label} type="button" role="menuitem" onClick={() => { setPosition(null); item.onSelect(); }}>{item.icon}{item.label}</button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
