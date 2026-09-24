@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Pencil, Trash2 } from "lucide-react";
+import { Ban, Lock, Pencil, Trash2 } from "lucide-react";
 import { deleteTour, setTourStatus, updateTour } from "@/features/records/actions";
 import { TOUR_TYPES, tourCommission } from "@/features/records/logic/tour-commission";
 import type { Locale } from "@/lib/i18n";
@@ -25,19 +25,22 @@ export type EditableTour = {
 };
 
 /**
- * Per-tour actions on Booked tours. Which removal applies follows the append-only rule:
- * - never created income (not paid, no payment history) -> "Eliminar" (real delete);
- * - paid, or income history -> "Cancelar tour" (status cancelled; a paid tour's
- *   commission is reversed in Income). Cancelled tours stay in history.
+ * Per-tour actions on Booked tours (append-only money rule):
+ * - Editar: pending tours only; a paid tour is locked.
+ * - Cancelar tour: anyone, any tour not already cancelled; a paid tour's commission
+ *   is reversed in Income. Cancelled tours stay in history.
+ * - Eliminar (real delete): owner/manager only, pending or cancelled tours that were
+ *   never paid (no payment or reversal linked).
  */
-export function TourActions({ tour, hasIncome, operators, locale }: { tour: EditableTour; hasIncome: boolean; operators: string[]; locale: Locale }) {
+export function TourActions({ tour, hasIncome, canManage, operators, locale }: { tour: EditableTour; hasIncome: boolean; canManage: boolean; operators: string[]; locale: Locale }) {
   const es = locale === "es";
   const router = useRouter();
   const [pending, start] = useTransition();
   const [dialog, setDialog] = useState<"edit" | "cancel" | null>(null);
   const [error, setError] = useState("");
-  const canDelete = tour.status !== "paid" && !hasIncome;
-  const canCancel = !canDelete && tour.status !== "cancelled";
+  const canEdit = tour.status === "pending";
+  const canDelete = canManage && tour.status !== "paid" && !hasIncome;
+  const canCancel = tour.status !== "cancelled";
 
   function remove() {
     if (!window.confirm(`${es ? "¿Eliminar este tour?" : "Delete this tour?"}\n${tour.tour_name} · ${tour.guest_name} · ${tour.tour_date}\n${es ? "No tiene ingresos registrados; se borra definitivamente." : "It has no income recorded; it is deleted permanently."}`)) return;
@@ -51,9 +54,11 @@ export function TourActions({ tour, hasIncome, operators, locale }: { tour: Edit
 
   return (
     <div className="tour-actions">
-      <button type="button" className="icon-button subtle" aria-label={`${es ? "Editar" : "Edit"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Editar" : "Edit"} disabled={pending} onClick={() => { setError(""); setDialog("edit"); }}><Pencil size={15} /></button>
-      {canDelete && <button type="button" className="icon-button subtle danger-icon" aria-label={`${es ? "Eliminar" : "Delete"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Eliminar (sin ingresos registrados)" : "Delete (no income recorded)"} disabled={pending} onClick={remove}><Trash2 size={15} /></button>}
-      {canCancel && <button type="button" className="secondary-button compact-button" title={tour.status === "paid" ? (es ? "Pagado: se cancela y se anula la comisión en Ingresos" : "Paid: cancels it and reverses the commission in Income") : (es ? "Tiene historial de ingresos: se cancela, no se borra" : "Has income history: cancelled, not deleted")} disabled={pending} onClick={() => { setError(""); setDialog("cancel"); }}><Ban size={14} />{es ? "Cancelar tour" : "Cancel tour"}</button>}
+      {canEdit
+        ? <button type="button" className="icon-button subtle" aria-label={`${es ? "Editar" : "Edit"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Editar" : "Edit"} disabled={pending} onClick={() => { setError(""); setDialog("edit"); }}><Pencil size={15} /></button>
+        : <button type="button" className="icon-button subtle" aria-label={es ? "Edición bloqueada" : "Editing locked"} title={tour.status === "paid" ? (es ? "Pagado: bloqueado. Use Cancelar tour (anula la comisión)." : "Paid: locked. Use Cancel tour (reverses the commission).") : (es ? "Cancelado: no se edita." : "Cancelled: not editable.")} disabled><Lock size={15} /></button>}
+      {canCancel && <button type="button" className="secondary-button compact-button" title={tour.status === "paid" ? (es ? "Pagado: se cancela y se anula la comisión en Ingresos" : "Paid: cancels it and reverses the commission in Income") : (es ? "Queda como Cancelado en el historial" : "Stays in history as Cancelled")} disabled={pending} onClick={() => { setError(""); setDialog("cancel"); }}><Ban size={14} />{es ? "Cancelar tour" : "Cancel tour"}</button>}
+      {canDelete && <button type="button" className="icon-button subtle danger-icon" aria-label={`${es ? "Eliminar" : "Delete"} · ${tour.tour_name} · ${tour.guest_name}`} title={es ? "Eliminar definitivamente (nunca se pagó)" : "Delete permanently (never paid)"} disabled={pending} onClick={remove}><Trash2 size={15} /></button>}
       {error && <p role="alert" className="form-error">{error}</p>}
       {dialog === "edit" && <EditTourModal tour={tour} operators={operators} locale={locale} onClose={() => setDialog(null)} />}
       {dialog === "cancel" && <CancelTourModal tour={tour} locale={locale} onClose={() => setDialog(null)} />}
@@ -72,7 +77,7 @@ function EditTourModal({ tour, operators, locale, onClose }: { tour: EditableTou
   const [f, setF] = useState({
     guestName: tour.guest_name, roomNumber: tour.room_number ?? "", operatorName: tour.operator_name, tourName: tour.tour_name,
     tourDate: tour.tour_date, adults: String(tour.adults), children: String(tour.children),
-    totalPrice: String(Number(tour.total_price)), commission: originalCommission.toFixed(2), status: tour.status as TourStatus, reason: ""
+    totalPrice: String(Number(tour.total_price)), commission: originalCommission.toFixed(2), status: tour.status as TourStatus
   });
   const [commissionTouched, setCommissionTouched] = useState(false);
   const set = (key: keyof typeof f) => (event: { target: { value: string } }) => setF((current) => ({ ...current, [key]: event.target.value }));
@@ -87,14 +92,11 @@ function EditTourModal({ tour, operators, locale, onClose }: { tour: EditableTou
   }
 
   const newCommission = Math.round(Number(f.commission) * 100) / 100;
-  const wasPaid = tour.status === "paid";
-  const leavesPaid = wasPaid && f.status !== "paid";
-  const correction = wasPaid && f.status === "paid" && Number.isFinite(newCommission) && Math.round(newCommission * 100) !== Math.round(originalCommission * 100);
-  const becomesPaid = !wasPaid && f.status === "paid";
+  // Only pending tours reach this form (paid ones are locked), so marking paid adds the commission once.
+  const becomesPaid = f.status === "paid";
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (leavesPaid && !f.reason.trim()) { setError(es ? "Indique el motivo: se registrará una anulación en Ingresos." : "Enter a reason: a reversal will be recorded in Income."); return; }
     if (Number(f.commission) > Number(f.totalPrice)) { setError(es ? "La comisión no puede ser mayor que el total." : "Commission cannot exceed the total."); return; }
     const form = new FormData(event.currentTarget);
     start(async () => {
@@ -122,9 +124,6 @@ function EditTourModal({ tour, operators, locale, onClose }: { tour: EditableTou
             <label>{`Total (${tour.currency})`}<input name="totalPrice" type="number" min={0} step="0.01" value={f.totalPrice} onChange={(event) => setPrice(event.target.value)} required /></label>
             <label>{es ? `Comisión (${tour.currency})` : `Commission (${tour.currency})`}<input name="commission" type="number" min={0} step="0.01" value={f.commission} onChange={(event) => { setCommissionTouched(true); set("commission")(event); }} required /></label>
             <label>{es ? "Estado de pago" : "Payment status"}<select name="status" value={f.status} onChange={set("status")}><option value="pending">{es ? "Pendiente" : "Pending"}</option><option value="paid">{es ? "Pagado" : "Paid"}</option><option value="cancelled">{es ? "Cancelado" : "Cancelled"}</option></select></label>
-            {leavesPaid && <label className="full-width">{es ? "Motivo (se anula la comisión en Ingresos)" : "Reason (the commission is reversed in Income)"}<input name="reason" value={f.reason} onChange={set("reason")} maxLength={500} required placeholder={es ? "Reembolso / anulación" : "Refund / void"} /></label>}
-            {!leavesPaid && <input type="hidden" name="reason" value="" />}
-            {correction && <p className="form-note full-width">{es ? `Se registrará en Ingresos una corrección: anulación de ${money(tour.currency, originalCommission)} y nuevo pago de ${money(tour.currency, newCommission)}. Nada se reescribe.` : `A correction will be recorded in Income: reversal of ${money(tour.currency, originalCommission)} and a new payment of ${money(tour.currency, newCommission)}. Nothing is rewritten.`}</p>}
             {becomesPaid && <p className="form-note full-width">{es ? `Se registrará la comisión ${money(tour.currency, newCommission)} en Ingresos.` : `The ${money(tour.currency, newCommission)} commission will be recorded in Income.`}</p>}
             {error && <p role="alert" className="form-error full-width">{error}</p>}
           </div>

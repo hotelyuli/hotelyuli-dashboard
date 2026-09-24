@@ -175,11 +175,11 @@ const tourEditSchema = z.object({
 }).refine((d) => d.commission <= d.totalPrice, { message: "COMMISSION_ABOVE_PRICE" });
 
 /**
- * Edit a tour from Booked tours. Money follows the append-only ledger:
- * - stays paid with a different commission -> reversal of the old income + a new payment;
- * - becomes paid -> one payment; leaves paid -> a reversal with the reason.
- * The ledger is written before the tour, so a retry heals a failure in between.
- * Any change to a sheet column re-queues the tour for Google Sheets (trigger, migration 0029).
+ * Edit a tour from Booked tours - PENDING tours only; a paid tour is locked (use
+ * Cancelar tour, which reverses its income). Setting the status to paid here adds the
+ * commission payment through the append-only ledger (written before the tour, so a
+ * retry heals a failure in between). Any change to a sheet column re-queues the tour
+ * for Google Sheets (trigger, migration 0029).
  */
 export async function updateTour(formData: FormData): Promise<ActionResult> {
   return runAction("updateTour", async () => {
@@ -189,6 +189,7 @@ export async function updateTour(formData: FormData): Promise<ActionResult> {
     const d = parsed.data;
     const { data: tour, error: tourError } = await supabase.from("tour_bookings").select("id, status, currency").eq("id", d.id).eq("hotel_id", profile.hotel_id).single();
     if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? d.id}`);
+    if (tour.status !== "pending") throw new Error(`TOUR_LOCKED: only pending tours can be edited (this one is ${tour.status}); a paid tour is changed with Cancelar tour`);
     const commission = Math.round(d.commission * 100) / 100;
 
     await settleWithCorrection({
@@ -218,13 +219,15 @@ export async function updateTour(formData: FormData): Promise<ActionResult> {
 }
 
 /**
- * Real delete, only for a tour that never created income (not paid, no payment or
- * reversal linked). Enforced by the RLS policy from migration 0029 as well; a paid
- * tour is cancelled instead (setTourStatus -> reversal). Its sheet row is cleared.
+ * Real delete: owner/manager only, and only for a pending or cancelled tour that was
+ * never paid (no payment or reversal linked). Enforced by the RLS policy from migration
+ * 0029 as well; a paid tour is cancelled instead (setTourStatus -> reversal), which any
+ * reception user can do. Its sheet row is cleared by the export.
  */
 export async function deleteTour(id: string): Promise<ActionResult> {
   return runAction("deleteTour", async () => {
     const { supabase, profile } = await authorizeWrite();
+    if (!["owner", "manager"].includes(profile.role)) throw new Error("NOT_AUTHORIZED: only an owner or manager can delete tours - use Cancelar tour");
     const tourId = z.string().uuid().parse(id);
     const [{ data: tour, error: tourError }, { count, error: incomeError }] = await Promise.all([
       supabase.from("tour_bookings").select("id, status").eq("id", tourId).eq("hotel_id", profile.hotel_id).single(),
@@ -232,7 +235,7 @@ export async function deleteTour(id: string): Promise<ActionResult> {
     ]);
     if (tourError || !tour) throw new Error(`TOUR_NOT_FOUND: ${tourError?.message ?? tourId}`);
     if (incomeError) throw new Error(`INCOME_CHECK_FAILED: ${incomeError.message}`);
-    if (tour.status === "paid" || (count ?? 0) > 0) throw new Error("HAS_INCOME: this tour created income - use Cancelar tour (reversal) instead of deleting");
+    if (!["pending", "cancelled"].includes(tour.status) || (count ?? 0) > 0) throw new Error("HAS_INCOME: this tour was paid - use Cancelar tour (reversal) instead of deleting");
     const { data, error } = await supabase.from("tour_bookings").delete().eq("id", tourId).eq("hotel_id", profile.hotel_id).select("id");
     if (error) throw new Error(`DELETE_FAILED: ${error.message}`);
     if (!data?.length) throw new Error("NOT_DELETED: deleting tours is not enabled yet (run migration 0029)");

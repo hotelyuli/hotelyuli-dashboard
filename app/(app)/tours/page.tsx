@@ -14,7 +14,7 @@ export default async function ToursPage({ searchParams }: { searchParams: Promis
   const locale = ((await cookies()).get("yulios-locale")?.value ?? "es") as Locale;
   const es = locale === "es";
   const { supabase, user } = await requireSession();
-  const { data: profile } = await supabase.from("profiles").select("hotel_id,full_name").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("hotel_id,full_name,role").eq("id", user.id).single();
   const today = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   // Default view: tours taking place today. ?date= shows another day; nothing is deleted.
   const day = selectedTourDay((await searchParams).date, today);
@@ -35,5 +35,5 @@ ${tour.tour_name} · ${tour.tour_date}
 ${es ? "Huésped" : "Guest"}: ${tour.guest_name}
 ${es ? "Habitación" : "Room"}: ${tour.room_number ?? "—"}
 ${es ? "Adultos / Niños" : "Adults / Children"}: ${tour.adults} / ${tour.children}
-Total: ${tour.currency} ${tour.total_price}`} /></td><td><TourActions tour={tour as EditableTour} hasIncome={withIncome.has(tour.id)} operators={operators} locale={locale} /></td></tr>) : <tr><td colSpan={12} className="empty-table-cell">{isToday ? (es ? "No hay tours para hoy." : "No tours for today.") : (es ? `No hay tours para el ${dayLabel}.` : `No tours on ${dayLabel}.`)}</td></tr>}</tbody></table></div></main>;
+Total: ${tour.currency} ${tour.total_price}`} /></td><td><TourActions tour={tour as EditableTour} hasIncome={withIncome.has(tour.id)} canManage={profile?.role === "owner" || profile?.role === "manager"} operators={operators} locale={locale} /></td></tr>) : <tr><td colSpan={12} className="empty-table-cell">{isToday ? (es ? "No hay tours para hoy." : "No tours for today.") : (es ? `No hay tours para el ${dayLabel}.` : `No tours on ${dayLabel}.`)}</td></tr>}</tbody></table></div></main>;
 }

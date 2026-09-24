@@ -11,6 +11,7 @@ const MIGRATIONS_DIR = path.resolve(__dirname, "../../supabase/migrations");
 const HOTEL = "11111111-1111-4111-8111-111111111111";
 const RECEPTIONIST = "33333333-3333-4333-8333-333333333333";
 const HOUSEKEEPER = "55555555-5555-4555-8555-555555555555";
+const MANAGER = "66666666-6666-4666-8666-666666666666";
 let db: PGlite;
 
 beforeAll(async () => {
@@ -26,8 +27,8 @@ beforeAll(async () => {
     grant select, insert, update, delete on all tables in schema public to authenticated;
     grant execute on all functions in schema auth to authenticated;
     insert into public.hotels (id, name, slug) values ('${HOTEL}', 'Hotel Yuli', 'hotel-yuli');
-    insert into auth.users (id) values ('${RECEPTIONIST}'), ('${HOUSEKEEPER}');
-    insert into public.profiles (id, hotel_id, full_name, role) values ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'), ('${HOUSEKEEPER}', '${HOTEL}', 'Marcos', 'housekeeping');
+    insert into auth.users (id) values ('${RECEPTIONIST}'), ('${HOUSEKEEPER}'), ('${MANAGER}');
+    insert into public.profiles (id, hotel_id, full_name, role) values ('${RECEPTIONIST}', '${HOTEL}', 'Rebeca', 'reception'), ('${HOUSEKEEPER}', '${HOTEL}', 'Marcos', 'housekeeping'), ('${MANAGER}', '${HOTEL}', 'Yuli', 'manager');
   `);
 }, 60_000);
 
@@ -69,23 +70,25 @@ describe("migration 0029: edit + delete tours", () => {
 
   it("an unpaid tour without income can be deleted, and its sheet row is re-queued for clearing", async () => {
     const id = await addTour("pending");
-    expect(await deleteTour(RECEPTIONIST, id)).toBe(1);
+    expect(await deleteTour(MANAGER, id)).toBe(1);
     expect(await outbox(id)).toBe("pending");
   });
 
   it("a paid tour, or one with income history, cannot be deleted", async () => {
     const paid = await addTour("paid");
     await addIncome(paid);
-    expect(await deleteTour(RECEPTIONIST, paid)).toBe(0);
+    expect(await deleteTour(MANAGER, paid)).toBe(0);
     const reverted = await addTour("pending");
     await addIncome(reverted); // was paid once: its income stays linked
-    expect(await deleteTour(RECEPTIONIST, reverted)).toBe(0);
+    expect(await deleteTour(MANAGER, reverted)).toBe(0);
     const cancelledPaidless = await addTour("cancelled");
-    expect(await deleteTour(RECEPTIONIST, cancelledPaidless)).toBe(1);
+    expect(await deleteTour(MANAGER, cancelledPaidless)).toBe(1);
   });
 
-  it("housekeeping cannot delete tours", async () => {
+  it("only owner/manager can delete: reception and housekeeping cannot (reception cancels instead)", async () => {
     const id = await addTour("pending");
+    expect(await deleteTour(RECEPTIONIST, id)).toBe(0);
     expect(await deleteTour(HOUSEKEEPER, id)).toBe(0);
+    expect(await deleteTour(MANAGER, id)).toBe(1);
   });
 });
