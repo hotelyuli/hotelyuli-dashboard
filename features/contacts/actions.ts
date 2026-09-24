@@ -23,7 +23,7 @@ export async function saveContact(form:FormData): Promise<ActionResult> {
  const {supabase,user,profile}=await context();
  const d=z.object({id:z.string().uuid().or(z.literal("")),name:z.string().trim().min(1).max(120),category:z.enum(["maintenance","ac","pool","septic","supplies","tour","other"]),phone:z.string().transform(normalizePhone),notes:z.string().trim().max(500),operator_name:z.string().trim().max(120)}).parse(Object.fromEntries(form));
  const {id,...fields}=d;
- const payload={...fields,operator_name:d.category==="tour"?d.operator_name:"",updated_at:new Date().toISOString()};
+ const payload={...fields,operator_name:d.category==="tour"?(d.operator_name||d.name):"",updated_at:new Date().toISOString()};
  const result=id ? await supabase.from("supplier_contacts").update(payload).eq("id",id).eq("hotel_id",profile.hotel_id).select("id").single() : await supabase.from("supplier_contacts").insert({...payload,hotel_id:profile.hotel_id,created_by:user.id}).select("id").single();
  if(result.error) throw Error(`SAVE_FAILED: ${result.error.message}`);
  revalidatePath("/contacts"); revalidatePath("/tours"); revalidatePath("/events");
