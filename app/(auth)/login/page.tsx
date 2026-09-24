@@ -1,5 +1,5 @@
 import { LoginForm } from "@/features/auth/components/LoginForm";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LoginLogo } from "@/features/auth/components/LoginLogo";
 import { cookies } from "next/headers";
 import { dictionary, type Locale } from "@/lib/i18n";
 
@@ -18,10 +18,7 @@ export default async function LoginPage() {
       </section>
       <section className="login-panel">
         <div className="login-card">
-          <LanguageSwitcher locale={locale} />
-          <p className="eyebrow">YuliOS</p>
-          <h2>{t.loginTitle}</h2>
-          <p className="muted">{t.loginSubtitle}</p>
+          <LoginLogo />
           <LoginForm messages={t} />
           <p className="login-help">{t.accessHelp}</p>
         </div>
@@ -29,4 +26,3 @@ export default async function LoginPage() {
     </main>
   );
 }
-
