@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { flushSheetsSoon } from "@/features/sheets/export";
 import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can } from "@/features/auth/logic/permissions";
@@ -123,6 +125,8 @@ async function saveOperationCell(formData: FormData) {
   revalidatePath("/breakfast");
   revalidatePath("/housekeeping");
   revalidatePath("/income");
+  // A stay marked paid / un-paid queued an income row: send it to Google Sheets now.
+  after(flushSheetsSoon);
 }
 
 const cleaningSchema = z.object({ rowId: z.string().uuid(), action: z.enum(["mark_ready", "pass_inspection"]) });

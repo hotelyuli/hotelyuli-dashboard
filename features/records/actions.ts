@@ -2,6 +2,8 @@
 
 import { tourCommission } from "./logic/tour-commission";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { flushSheetsSoon } from "@/features/sheets/export";
 import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
@@ -111,7 +113,7 @@ export async function registerTour(formData: FormData) {
   if (error || !tour) throw new Error("SAVE_FAILED");
   const { error: queueError } = await supabase.from("google_sheets_outbox").insert({ hotel_id: profile.hotel_id, entity_type: "tour", entity_id: tour.id, payload });
   if (queueError) throw new Error("QUEUE_FAILED");
-  revalidatePath("/tours"); revalidatePath("/dashboard");
+  after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/dashboard");
 }
 
 const tourStatusSchema = z.object({
@@ -159,7 +161,7 @@ async function saveTourStatus(formData: FormData) {
 
   const { data: updated, error } = await supabase.from("tour_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", tour.id).eq("hotel_id", profile.hotel_id).select("id").single();
   if (error || !updated) throw new Error(`SAVE_FAILED: ${error?.message ?? "tour not updated"}`);
-  revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard");
+  after(flushSheetsSoon); revalidatePath("/tours"); revalidatePath("/income"); revalidatePath("/dashboard");
 }
 
 const incomeSchema = z.object({
@@ -179,7 +181,7 @@ export async function registerIncome(formData: FormData) {
   if (error || !income) throw new Error("SAVE_FAILED");
   const { error: queueError } = await supabase.from("google_sheets_outbox").insert({ hotel_id: profile.hotel_id, entity_type: "income", entity_id: income.id, payload });
   if (queueError) throw new Error("QUEUE_FAILED");
-  revalidatePath("/income"); revalidatePath("/dashboard");
+  after(flushSheetsSoon); revalidatePath("/income"); revalidatePath("/dashboard");
 }
 
 /**

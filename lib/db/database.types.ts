@@ -128,9 +128,9 @@ export type Database = {
         Relationships: [];
       };
       google_sheets_outbox: {
-        Row: { id: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status: "pending" | "sent" | "failed"; attempt_count: number; last_error: string | null; sent_at: string | null; created_at: string };
-        Insert: { id?: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status?: "pending" | "sent" | "failed"; attempt_count?: number; last_error?: string | null; sent_at?: string | null; created_at?: string };
-        Update: never;
+        Row: { id: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status: "pending" | "sending" | "sent" | "failed" | "skipped"; attempt_count: number; last_error: string | null; sent_at: string | null; claimed_at: string | null; sheet_range: string | null; sheet_values: Json | null; created_at: string };
+        Insert: { id?: string; hotel_id: string; entity_type: "tour" | "income"; entity_id: string; payload: Json; status?: "pending" | "sending" | "sent" | "failed" | "skipped"; attempt_count?: number; last_error?: string | null; sent_at?: string | null; created_at?: string };
+        Update: { status?: "pending" | "sending" | "sent" | "failed" | "skipped"; attempt_count?: number; last_error?: string | null; sent_at?: string | null; claimed_at?: string | null; sheet_range?: string | null; sheet_values?: Json | null };
         Relationships: [];
       };
     };
