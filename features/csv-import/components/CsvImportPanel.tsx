@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LogIn, LogOut, CheckCircle2, FileSpreadsheet, Upload, X } from "lucide-react";
 import { commitCsvImport, type ImportState } from "@/features/csv-import/actions";
 import { parseCsv, type ParsedCsv } from "@/features/csv-import/logic/parser";
@@ -9,6 +10,8 @@ import { dictionary, type Locale } from "@/lib/i18n";
 type ImportKind = "check_in" | "check_out";
 type LoadedFile = ParsedCsv & { name: string; kind: ImportKind };
 const initialState: ImportState = { status: "idle" };
+/** How long "Import saved successfully." stays visible before the modal closes itself. */
+const AUTO_CLOSE_MS = 1200;
 
 export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale; variant?: "compact" | "bar" }) {
   const t = dictionary(locale);
@@ -17,7 +20,31 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
   const [error, setError] = useState("");
   const checkInRef = useRef<HTMLInputElement>(null);
   const checkOutRef = useRef<HTMLInputElement>(null);
-  const [state, action, pending] = useActionState(commitCsvImport, initialState);
+  const [actionState, action, pending] = useActionState(commitCsvImport, initialState);
+  const router = useRouter();
+  // useActionState can't be reset, so a result already handled by close() is hidden instead (the next upload starts clean).
+  const [dismissed, setDismissed] = useState<ImportState | null>(null);
+  const state = actionState === dismissed ? initialState : actionState;
+  // A clean save (no row errors) locks the buttons and auto-closes; errors keep the modal open as before.
+  const savedClean = state.status === "success" && !state.rowErrors?.length;
+
+  function close() {
+    setOpen(false);
+    setLoaded(null);
+    setError("");
+    setDismissed(actionState);
+    if (checkInRef.current) checkInRef.current.value = "";
+    if (checkOutRef.current) checkOutRef.current.value = "";
+    router.refresh();
+  }
+  const closeRef = useRef(close);
+  useEffect(() => { closeRef.current = close; });
+
+  useEffect(() => {
+    if (!savedClean) return;
+    const timer = window.setTimeout(() => closeRef.current(), AUTO_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [savedClean, actionState]);
 
   async function loadFile(kind: ImportKind, file?: File) {
     if (!file) return;
@@ -38,9 +65,9 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
       <input ref={checkInRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_in", event.target.files?.[0])} />
       <input ref={checkOutRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_out", event.target.files?.[0])} />
     </div>
-    {open && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}>
+    {open && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <section className="csv-modal" role="dialog" aria-modal="true" aria-labelledby="csv-title">
-        <header><div><p className="eyebrow">LITTLE HOTELIER</p><h2 id="csv-title">{t.csvImportTitle}</h2></div><button onClick={() => setOpen(false)} aria-label={t.cancel}><X /></button></header>
+        <header><div><p className="eyebrow">LITTLE HOTELIER</p><h2 id="csv-title">{t.csvImportTitle}</h2></div><button onClick={close} aria-label={t.cancel}><X /></button></header>
         {error && <p className="form-error">{error}</p>}
         {loaded && <form action={action}>
           <input type="hidden" name="payload" value={JSON.stringify({ fileType: loaded.kind, fileName: loaded.name, headers: loaded.headers, rows: loaded.rows })} />
@@ -55,7 +82,7 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
             </div>
           )}
           {state.status === "error" && <p className="form-error">{t.invalidCsv}</p>}
-          <footer><button type="button" className="secondary-button" onClick={() => (loaded.kind === "check_in" ? checkInRef : checkOutRef).current?.click()}>{t.replaceFile}</button><button className="primary-button" disabled={pending}>{pending ? "…" : t.confirmImport}</button></footer>
+          <footer><button type="button" className="secondary-button" disabled={pending || savedClean} onClick={() => (loaded.kind === "check_in" ? checkInRef : checkOutRef).current?.click()}>{t.replaceFile}</button><button className="primary-button" disabled={pending || savedClean}>{pending ? "…" : t.confirmImport}</button></footer>
         </form>}
       </section>
     </div>}
