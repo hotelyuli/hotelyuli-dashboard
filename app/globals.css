@@ -385,3 +385,13 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .incident-hint{margin:6px 0 0;font-size:12px;line-height:1.4;color:var(--muted)}
 .incident-modal footer{position:sticky;bottom:0;flex:none;display:flex;justify-content:flex-end;gap:.7rem;padding:16px 24px;border-top:1px solid var(--line);background:white}
 @media(prefers-reduced-motion:reduce){.segment span{transition:none}}
+.breakfast-control-card{margin-top:1.5rem;border:1px solid var(--line);border-radius:14px;background:white;overflow:hidden}
+.breakfast-control-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:1rem 1.2rem;border-bottom:1px solid var(--line)}
+.breakfast-control-head h2{margin:0;font-size:1.25rem}
+.breakfast-control-head p{margin:0;color:var(--muted)}
+.breakfast-control-card .board-table-scroll{overflow-x:auto}
+.breakfast-control-card .board-table th{position:static}
+.breakfast-control-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;padding:1rem 1.2rem;border-top:1px solid var(--line)}
+.breakfast-control-totals .record-summary-card>span{display:block;font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.breakfast-control-totals small{font:500 1rem var(--font-sans),sans-serif;color:var(--muted)}
+@media (max-width:640px){.breakfast-control-totals{grid-template-columns:1fr}}

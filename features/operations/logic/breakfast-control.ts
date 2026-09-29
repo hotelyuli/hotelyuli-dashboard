@@ -84,22 +84,15 @@ export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
   return [...rooms].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-type Line = { room: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGoTimes: string[]; toGo: boolean; notes: string[] };
+/** One room line, shared by the page card and the text. Room 20 beds are merged into "20 (camas)". */
+export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[] };
+export type ControlSummary = { lines: ControlLine[]; free: string[]; guests: number; includedPax: number; includedRooms: number };
 
-function formatLine(line: Line) {
-  const parts = [line.beds ? `${line.room} (camas)` : line.room, line.names.length ? line.names.join(" / ") : "—", `${line.pax} pax`];
-  if (line.included) parts.push(`✅ DESAYUNO INCLUIDO${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`);
-  if (line.toGo) parts.push(`🥡 para llevar${line.toGoTimes.length ? ` ${[...line.toGoTimes].sort()[0]}` : ""}`);
-  if (line.notes.length) parts.push(`📝 ${line.notes.join(" / ")}`);
-  return parts.join(" · ");
-}
-
-/** Plain text for Copiar / WhatsApp / Imprimir. Room 20 beds merge into one "20 (camas)" line. */
-export function formatBreakfastControl({ date, entries, free }: { date: string; entries: ControlEntry[]; free: string[] }) {
-  const lines = new Map<string, Line>();
+export function summarizeBreakfastControl({ entries, free }: { entries: ControlEntry[]; free: string[] }): ControlSummary {
+  const lines = new Map<string, ControlLine>();
   entries.forEach((entry, index) => {
     const key = entry.beds ? `beds:${entry.room}` : `entry:${index}`;
-    const line = lines.get(key) ?? { room: entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGoTimes: [], toGo: false, notes: [] };
+    const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} (camas)` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [] };
     const name = entry.guestName?.trim();
     if (name && !line.names.includes(name)) line.names.push(name);
     if (entry.notes && !line.notes.includes(entry.notes)) line.notes.push(entry.notes);
@@ -111,23 +104,42 @@ export function formatBreakfastControl({ date, entries, free }: { date: string; 
     }
     if (entry.toGo) {
       line.toGo = true;
-      if (entry.toGoTime) line.toGoTimes.push(entry.toGoTime.slice(0, 5));
+      const time = entry.toGoTime?.slice(0, 5) ?? null;
+      if (time && (!line.toGoTime || time < line.toGoTime)) line.toGoTime = time;
     }
     lines.set(key, line);
   });
 
   const sorted = [...lines.values()].sort((a, b) => a.sortOrder - b.sortOrder);
-  const guests = sorted.reduce((sum, line) => sum + line.pax, 0);
   const included = sorted.filter((line) => line.included);
-  const includedPax = included.reduce((sum, line) => sum + line.breakfastPax, 0);
+  return {
+    lines: sorted,
+    free,
+    guests: sorted.reduce((sum, line) => sum + line.pax, 0),
+    includedPax: included.reduce((sum, line) => sum + line.breakfastPax, 0),
+    includedRooms: included.length
+  };
+}
 
+export const freeLabel = (free: string[]) => free.length ? free.join(", ") : "ninguna";
+
+function formatLine(line: ControlLine) {
+  const parts = [line.label, line.names.length ? line.names.join(" / ") : "—", `${line.pax} pax`];
+  if (line.included) parts.push(`✅ DESAYUNO INCLUIDO${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`);
+  if (line.toGo) parts.push(`🥡 para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""}`);
+  if (line.notes.length) parts.push(`📝 ${line.notes.join(" / ")}`);
+  return parts.join(" · ");
+}
+
+/** Plain text for Copiar / WhatsApp / Imprimir, built from the same summary as the page card. */
+export function formatBreakfastControl({ date, summary }: { date: string; summary: ControlSummary }) {
   return [
     `Control de desayunos · ${controlDateLabel(date)}`,
     "",
-    ...(sorted.length ? sorted.map(formatLine) : ["Sin huéspedes para el desayuno."]),
-    `Libres: ${free.length ? free.join(", ") : "ninguna"}`,
+    ...(summary.lines.length ? summary.lines.map(formatLine) : ["Sin huéspedes para el desayuno."]),
+    `Libres: ${freeLabel(summary.free)}`,
     "",
-    `Total huéspedes en el hotel: ${guests} pax`,
-    `Con desayuno incluido: ${includedPax} pax (${included.length} hab.)`
+    `Total huéspedes en el hotel: ${summary.guests} pax`,
+    `Con desayuno incluido: ${summary.includedPax} pax (${summary.includedRooms} hab.)`
   ].join("\n");
 }

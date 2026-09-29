@@ -3,7 +3,8 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { MessageActions } from "@/features/reports/components/MessageActions";
 import { selectedTourDay } from "@/features/records/logic/tour-day";
-import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, freeRooms, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
+import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, freeRooms, summarizeBreakfastControl, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
+import { BreakfastControlCard } from "@/features/operations/components/BreakfastControlCard";
 import type { Locale } from "@/lib/i18n";
 
 export const metadata = { title: "Control de desayunos" };
@@ -34,7 +35,8 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
     dayRows: (operations ?? []).filter((row) => row.operation_date === day).map(toDayRow),
     previousDayRows: (operations ?? []).filter((row) => row.operation_date === previousDay).map(toDayRow)
   });
-  const message = formatBreakfastControl({ date: day, entries, free: freeRooms(units, entries) });
+  const summary = summarizeBreakfastControl({ entries, free: freeRooms(units, entries) });
+  const message = formatBreakfastControl({ date: day, summary });
 
   return (
     <main className="dashboard-page">
@@ -51,6 +53,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
         </div>
         <MessageActions text={message} locale={locale} />
       </div>
+      <BreakfastControlCard date={day} summary={summary} locale={locale} />
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>
     </main>
   );
