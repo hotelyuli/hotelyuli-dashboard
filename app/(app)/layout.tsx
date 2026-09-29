@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     { label: t.dashboard, href: "/dashboard", enabled: true },
     { label: t.operations, href: "/operations", enabled: true },
     { label: t.breakfast, href: "/breakfast", enabled: true },
+    { label: locale === "es" ? "Control desayunos" : "Breakfast control", href: "/breakfast/control", enabled: true },
     { label: t.housekeeping, href: "/housekeeping", enabled: true },
     { label: t.events, href: "/events", enabled: true },
     { label: t.tasks, href: "/tasks", enabled: true },

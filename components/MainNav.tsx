@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, BedDouble, Coffee, BrushCleaning, CalendarDays, ClipboardCheck, Palmtree, Wallet, FileText } from "lucide-react";
-const icons = { "/dashboard": LayoutDashboard, "/operations": BedDouble, "/breakfast": Coffee, "/housekeeping": BrushCleaning, "/events": CalendarDays, "/tasks": ClipboardCheck, "/tours": Palmtree, "/income": Wallet, "/reports": FileText };
+import { LayoutDashboard, BedDouble, Coffee, UtensilsCrossed, BrushCleaning, CalendarDays, ClipboardCheck, Palmtree, Wallet, FileText } from "lucide-react";
+const icons = { "/dashboard": LayoutDashboard, "/operations": BedDouble, "/breakfast": Coffee, "/breakfast/control": UtensilsCrossed,"/housekeeping": BrushCleaning, "/events": CalendarDays, "/tasks": ClipboardCheck, "/tours": Palmtree, "/income": Wallet, "/reports": FileText };
 import { usePathname } from "next/navigation";
 
 export type NavItem = { label: string; href: string; enabled: boolean };
