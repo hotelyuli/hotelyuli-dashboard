@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SaveReportButton } from "@/features/reports/components/SaveReportButton";
 import { ReportHistory } from "@/features/reports/components/ReportHistory";
 import { cookies } from "next/headers";
@@ -27,7 +28,7 @@ export default async function BreakfastPage() {
 
   return (
     <main className="dashboard-page">
-      <div className="page-heading"><div><p className="eyebrow">{es ? "RESTAURANTE" : "RESTAURANT"}</p><h1>{es ? "Reporte de desayuno" : "Breakfast report"}</h1><p>{es ? `${total} desayunos incluidos para hoy.` : `${total} included breakfast covers today.`}</p></div><MessageActions text={message} locale={locale} /></div>
+      <div className="page-heading"><div><p className="eyebrow">{es ? "RESTAURANTE" : "RESTAURANT"}</p><h1>{es ? "Reporte de desayuno" : "Breakfast report"}</h1><p>{es ? `${total} desayunos incluidos para hoy.` : `${total} included breakfast covers today.`}</p></div><div className="message-actions"><MessageActions text={message} locale={locale} /><Link className="secondary-button" href="/breakfast/control">{es ? "Lista para restaurante" : "Restaurant list"}</Link></div></div>
       <div className="board-table-wrap">
         <table className="board-table"><thead><tr><th>{es ? "Habitación" : "Room"}</th><th>{es ? "Huésped" : "Guest"}</th><th>Pax</th><th>{es ? "Para llevar" : "To go"}</th><th>{es ? "Notas" : "Notes"}</th></tr></thead>
           <tbody>{rows.length ? rows.map((row) => <tr key={row.room_id}><td><strong>{roomById.get(row.room_id)?.display_name ?? "—"}</strong></td><td>{row.guest_name ?? "—"}</td><td>{row.breakfast_pax}</td><td>{row.breakfast_to_go ? (es ? "Sí" : "Yes") : "—"}</td><td>{row.breakfast_notes ?? "—"}</td></tr>) : <tr><td colSpan={5} className="empty-table-cell">{es ? "No hay desayunos incluidos registrados para hoy." : "No included breakfasts are registered for today."}</td></tr>}</tbody>

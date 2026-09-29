@@ -77,11 +77,11 @@ export function controlEntries(params: { date: string; units: ControlUnit[]; res
   });
 }
 
-/** Active rooms with nobody listed; Room 20's beds count as one room. */
+/** Active room numbers with nobody listed, ascending. Room 20 is free only when none of its beds is listed. */
 export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
   const rooms = new Set(units.filter((unit) => unit.active).map((unit) => unit.unitType === "bunk" ? unit.parentRoomNumber ?? unit.roomNumber : unit.roomNumber));
   for (const entry of entries) rooms.delete(entry.room);
-  return rooms.size;
+  return [...rooms].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
 type Line = { room: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGoTimes: string[]; toGo: boolean; notes: string[] };
@@ -95,7 +95,7 @@ function formatLine(line: Line) {
 }
 
 /** Plain text for Copiar / WhatsApp / Imprimir. Room 20 beds merge into one "20 (camas)" line. */
-export function formatBreakfastControl({ date, entries, free }: { date: string; entries: ControlEntry[]; free: number }) {
+export function formatBreakfastControl({ date, entries, free }: { date: string; entries: ControlEntry[]; free: string[] }) {
   const lines = new Map<string, Line>();
   entries.forEach((entry, index) => {
     const key = entry.beds ? `beds:${entry.room}` : `entry:${index}`;
@@ -125,7 +125,7 @@ export function formatBreakfastControl({ date, entries, free }: { date: string; 
     `Control de desayunos · ${controlDateLabel(date)}`,
     "",
     ...(sorted.length ? sorted.map(formatLine) : ["Sin huéspedes para el desayuno."]),
-    `Libres: ${free}`,
+    `Libres: ${free.length ? free.join(", ") : "ninguna"}`,
     "",
     `Total huéspedes en el hotel: ${guests} pax`,
     `Con desayuno incluido: ${includedPax} pax (${included.length} hab.)`

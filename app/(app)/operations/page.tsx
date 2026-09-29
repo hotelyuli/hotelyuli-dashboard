@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { dictionary, type Locale } from "@/lib/i18n";
@@ -77,6 +78,7 @@ export default async function OperationsPage() {
           <h1>{t.operationsTitle}</h1>
           <p>{t.operationsSubtitle}</p>
         </div>
+        <Link className="secondary-button" href="/breakfast/control">{locale === "es" ? "Lista para restaurante" : "Restaurant list"}</Link>
       </div>
       <RoomBoardTable rows={rows} rooms={roomOptions} locale={locale} />
     </main>

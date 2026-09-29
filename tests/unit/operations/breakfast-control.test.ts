@@ -10,11 +10,11 @@ const lines = (text: string) => text.split("\n");
 
 describe("formatBreakfastControl", () => {
   it("empty day", () => {
-    expect(formatBreakfastControl({ date: D, entries: [], free: 20 })).toBe([
+    expect(formatBreakfastControl({ date: D, entries: [], free: ["2", "8", "12"] })).toBe([
       "Control de desayunos · mié 30/09/2026",
       "",
       "Sin huéspedes para el desayuno.",
-      "Libres: 20",
+      "Libres: 2, 8, 12",
       "",
       "Total huéspedes en el hotel: 0 pax",
       "Con desayuno incluido: 0 pax (0 hab.)"
@@ -22,7 +22,7 @@ describe("formatBreakfastControl", () => {
   });
 
   it("normal day, sorted by room order", () => {
-    const text = formatBreakfastControl({ date: D, free: 18, entries: [
+    const text = formatBreakfastControl({ date: D, free: [], entries: [
       entry({ room: "3", sortOrder: 3, guestName: "Luis Rojas", pax: 2 }),
       entry({ room: "1", sortOrder: 1, guestName: "Ana Mora", pax: 3 })
     ] });
@@ -31,12 +31,12 @@ describe("formatBreakfastControl", () => {
       "",
       "1 · Ana Mora · 3 pax",
       "3 · Luis Rojas · 2 pax",
-      "Libres: 18"
+      "Libres: ninguna"
     ]);
   });
 
   it("merges Room 20 with two beds into one line", () => {
-    const text = formatBreakfastControl({ date: D, free: 19, entries: [
+    const text = formatBreakfastControl({ date: D, free: [], entries: [
       entry({ room: "20", beds: true, sortOrder: 21, guestName: "Tom", pax: 1 }),
       entry({ room: "20", beds: true, sortOrder: 20, guestName: "Eva", pax: 1 })
     ] });
@@ -45,7 +45,7 @@ describe("formatBreakfastControl", () => {
   });
 
   it("to-go shows the earliest time, or none when unset", () => {
-    const text = formatBreakfastControl({ date: D, free: 0, entries: [
+    const text = formatBreakfastControl({ date: D, free: [], entries: [
       entry({ room: "20", beds: true, sortOrder: 20, guestName: "Tom", pax: 1, toGo: true, toGoTime: "07:15:00" }),
       entry({ room: "20", beds: true, sortOrder: 21, guestName: "Eva", pax: 1, toGo: true, toGoTime: "06:30:00" }),
       entry({ room: "5", sortOrder: 5, guestName: "Ana", pax: 2, toGo: true })
@@ -55,7 +55,7 @@ describe("formatBreakfastControl", () => {
   });
 
   it("marks an included room, with covers when a baby does not eat, and notes", () => {
-    const text = formatBreakfastControl({ date: D, free: 0, entries: [
+    const text = formatBreakfastControl({ date: D, free: [], entries: [
       entry({ room: "11", sortOrder: 11, guestName: "Dana Levi", pax: 3, breakfastIncluded: true, breakfastPax: 3, notes: "Sin gluten" }),
       entry({ room: "14", sortOrder: 14, guestName: "Kim Park", pax: 3, breakfastIncluded: true, breakfastPax: 2 })
     ] });
@@ -64,7 +64,7 @@ describe("formatBreakfastControl", () => {
   });
 
   it("totals: all listed guests, included covers and rooms (Room 20 counts once); no currencies", () => {
-    const text = formatBreakfastControl({ date: D, free: 2, entries: [
+    const text = formatBreakfastControl({ date: D, free: ["2", "8"], entries: [
       entry({ room: "1", sortOrder: 1, pax: 3 }),
       entry({ room: "11", sortOrder: 11, pax: 3, breakfastIncluded: true, breakfastPax: 3 }),
       entry({ room: "14", sortOrder: 14, pax: 2, breakfastIncluded: true, breakfastPax: 2 }),
@@ -110,12 +110,30 @@ describe("controlEntries field sources", () => {
     expect(entries.find((e) => e.room === "1")).toMatchObject({ breakfastIncluded: true, toGoTime: "07:00", notes: null });
     expect(entries.find((e) => e.room === "2")).toMatchObject({ breakfastIncluded: false, toGo: false, notes: "Vegano" });
     expect(entries.find((e) => e.room === "20")).toMatchObject({ beds: true, breakfastIncluded: true, breakfastPax: 1, toGo: false, toGoTime: null, notes: null });
-    expect(freeRooms(units, entries)).toBe(0);
+    expect(freeRooms(units, entries)).toEqual([]);
   });
 
-  it("counts rooms with nobody listed as free, Room 20 as one room", () => {
-    const entries = controlEntries({ date: D, units, reservations: [reservation({ roomId: "r1" }), reservation({ id: "y", roomId: "b2", arrivalDate: D })], dayRows: [], previousDayRows: [] });
-    expect(entries.map((e) => e.room)).toEqual(["1"]);
-    expect(freeRooms(units, entries)).toBe(2);
+});
+
+describe("freeRooms", () => {
+  const room = (n: string, sortOrder: number, active = true): ControlUnit => ({ roomId: `r${n}`, roomNumber: n, unitType: "room", parentRoomNumber: null, sortOrder, active });
+  const bed = (n: number): ControlUnit => ({ roomId: `b${n}`, roomNumber: `B${n}`, unitType: "bunk", parentRoomNumber: "20", sortOrder: 19 + n, active: true });
+  const units = [room("12", 12), room("2", 2), room("8", 8), room("1", 1), room("5", 5, false), ...[1, 2, 3, 4, 5, 6].map(bed)];
+  const listed = (...rooms: [string, boolean][]) => rooms.map(([r, beds]) => entry({ room: r, beds }));
+
+  it("lists free room numbers ascending, Room 20 when all six beds are empty; skips inactive rooms", () => {
+    const free = freeRooms(units, listed(["1", false]));
+    expect(free).toEqual(["2", "8", "12", "20"]);
+    expect(formatBreakfastControl({ date: D, entries: [], free })).toContain("\nLibres: 2, 8, 12, 20\n");
+  });
+
+  it("leaves Room 20 out when any bed is listed", () => {
+    expect(freeRooms(units, listed(["1", false], ["20", true]))).toEqual(["2", "8", "12"]);
+  });
+
+  it("shows 'ninguna' when nothing is free", () => {
+    const free = freeRooms(units, listed(["1", false], ["2", false], ["8", false], ["12", false], ["20", true]));
+    expect(free).toEqual([]);
+    expect(formatBreakfastControl({ date: D, entries: [], free })).toContain("\nLibres: ninguna\n");
   });
 });
