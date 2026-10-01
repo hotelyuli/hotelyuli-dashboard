@@ -5,7 +5,7 @@ import type { Locale } from "@/lib/i18n";
 export function BreakfastControlCard({ date, summary, locale }: { date: string; summary: ControlSummary; locale: Locale }) {
   const es = locale === "es";
   return (
-    <section className="breakfast-control-card" aria-label={es ? "Control de desayunos" : "Breakfast control"}>
+    <section id="breakfast-control-card" className="breakfast-control-card" aria-label={es ? "Control de desayunos" : "Breakfast control"}>
       <header className="breakfast-control-head">
         <h2>{es ? "Desayuno del" : "Breakfast on"} {controlDateLabel(date)}</h2>
         <p data-testid="control-free"><strong>{es ? "Libres" : "Free"}:</strong> {freeLabel(summary.free)}</p>

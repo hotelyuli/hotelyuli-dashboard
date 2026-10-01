@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { MessageActions } from "@/features/reports/components/MessageActions";
+import { DownloadPdfButton } from "@/features/reports/components/DownloadPdfButton";
 import { selectedTourDay } from "@/features/records/logic/tour-day";
 import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, freeRooms, summarizeBreakfastControl, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
 import { BreakfastControlCard } from "@/features/operations/components/BreakfastControlCard";
@@ -39,7 +40,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
   const message = formatBreakfastControl({ date: day, summary });
 
   return (
-    <main className="dashboard-page">
+    <main className="dashboard-page breakfast-control-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">{es ? "RESTAURANTE" : "RESTAURANT"}</p>
@@ -51,7 +52,10 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
             {day !== tomorrow && <a className="secondary-button" href="/breakfast/control">{es ? "Mañana" : "Tomorrow"}</a>}
           </form>
         </div>
-        <MessageActions text={message} locale={locale} />
+        <div className="message-actions">
+          <MessageActions text={message} locale={locale} />
+          <DownloadPdfButton targetId="breakfast-control-card" fileName={`control-desayunos-${day}.pdf`} locale={locale} />
+        </div>
       </div>
       <BreakfastControlCard date={day} summary={summary} locale={locale} />
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>

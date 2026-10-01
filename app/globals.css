@@ -395,3 +395,18 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .breakfast-control-totals .record-summary-card>span{display:block;font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .breakfast-control-totals small{font:500 1rem var(--font-sans),sans-serif;color:var(--muted)}
 @media (max-width:640px){.breakfast-control-totals{grid-template-columns:1fr}}
+/* Control de desayunos: Ctrl+P prints only the card, on one A4 page. */
+@media print{
+  @page{size:A4;margin:10mm}
+  .app-shell:has(.breakfast-control-page)>:not(.breakfast-control-page){display:none!important}
+  .breakfast-control-page{padding:0}
+  .breakfast-control-page>:not(.breakfast-control-card){display:none!important}
+  .breakfast-control-card{margin:0;border:0;border-radius:0}
+  .breakfast-control-head{padding:0 0 .5rem}
+  .breakfast-control-card .board-table{font-size:10.5px;white-space:normal}
+  .breakfast-control-card .board-table th,.breakfast-control-card .board-table td{padding:.3rem .45rem}
+  .breakfast-control-card tr{break-inside:avoid}
+  .breakfast-control-totals{padding:.6rem 0 0;border-top:0}
+  .breakfast-control-totals .record-summary-card{padding:.5rem .8rem}
+  .breakfast-control-totals .record-summary-card strong{font-size:1.4rem}
+}
