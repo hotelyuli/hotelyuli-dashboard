@@ -19,7 +19,7 @@ type IncidentForMessage = { event_time: string; category: string; room_area: str
 /** Spanish WhatsApp text for any incident; the employee picks the recipient in WhatsApp. */
 export function incidentWhatsAppText(event: IncidentForMessage): string {
   return [
-    "🏨 Hotel Yuli — Incidencia",
+    "\u{1F3E8} Hotel Yuli — Incidencia",
     `Habitación: ${event.room_area?.trim() || "—"} · ${incidentCategoryLabel(event.category)}`,
     event.description.trim(),
     `Hora: ${event.event_time.slice(0, 5)} · Estado: ${incidentStatusLabel(event.status, "es")}`

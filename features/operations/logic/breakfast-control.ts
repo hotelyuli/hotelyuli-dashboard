@@ -149,9 +149,9 @@ export const freeLabel = (free: string[]) => free.length ? free.join(", ") : "ni
 
 function formatLine(line: ControlLine) {
   const parts = [line.label, line.names.length ? line.names.join(" / ") : "—", `${line.pax} pax`];
-  if (line.included) parts.push(`✅ DESAYUNO INCLUIDO${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`);
-  if (line.toGo) parts.push(`🥡 para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""}`);
-  if (line.notes.length) parts.push(`📝 ${line.notes.join(" / ")}`);
+  if (line.included) parts.push(`\u2705 DESAYUNO INCLUIDO${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`);
+  if (line.toGo) parts.push(`\u{1F961} para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""}`);
+  if (line.notes.length) parts.push(`\u{1F4DD} ${line.notes.join(" / ")}`);
   return parts.join(" · ");
 }
 

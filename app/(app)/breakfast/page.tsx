@@ -24,7 +24,7 @@ export default async function BreakfastPage() {
   const total = rows.reduce((sum, row) => sum + row.breakfast_pax, 0);
   const es = locale === "es";
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["🥐 HOTEL YULI", es ? "Desayuno" : "Breakfast", dateLabel, "", ...rows.map((row) => `${roomById.get(row.room_id)?.display_name ?? "—"} · ${row.guest_name ?? "—"} · ${row.breakfast_pax} pax${row.breakfast_to_go ? ` · ${es ? "Para llevar" : "To go"}` : ""}${row.breakfast_notes ? ` · ${row.breakfast_notes}` : ""}`), "", `${es ? "Total" : "Total covers"}: ${total} pax`].join("\n");
+  const message = ["\u{1F950} HOTEL YULI", es ? "Desayuno" : "Breakfast", dateLabel, "", ...rows.map((row) => `${roomById.get(row.room_id)?.display_name ?? "—"} · ${row.guest_name ?? "—"} · ${row.breakfast_pax} pax${row.breakfast_to_go ? ` · ${es ? "Para llevar" : "To go"}` : ""}${row.breakfast_notes ? ` · ${row.breakfast_notes}` : ""}`), "", `${es ? "Total" : "Total covers"}: ${total} pax`].join("\n");
 
   return (
     <main className="dashboard-page">

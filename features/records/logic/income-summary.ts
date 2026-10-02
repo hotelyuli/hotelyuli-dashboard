@@ -65,7 +65,7 @@ export function buildIncomeSummary(entries: IncomeForSummary[], dateLabel: strin
 
   const reversals = settled.filter((entry) => entry.entryType === "reversal").sort((a, b) => a.time.localeCompare(b.time));
   const message = [
-    "💰 HOTEL YULI",
+    "\u{1F4B0} HOTEL YULI",
     "Ingresos del día",
     dateLabel,
     "",

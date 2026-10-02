@@ -5,7 +5,7 @@ import { otherRecipientPhone } from "@/features/contacts/SupplierMessage";
 describe("incident WhatsApp message", () => {
   it("builds the Spanish message for any category", () => {
     expect(incidentWhatsAppText({ event_time: "10:15:00", category: "guest_complaint", room_area: "Hab 9", description: " Ruido de la calle ", status: "follow_up" }))
-      .toBe("🏨 Hotel Yuli — Incidencia\nHabitación: Hab 9 · Queja de huésped\nRuido de la calle\nHora: 10:15 · Estado: Seguimiento");
+      .toBe("\u{1F3E8} Hotel Yuli — Incidencia\nHabitación: Hab 9 · Queja de huésped\nRuido de la calle\nHora: 10:15 · Estado: Seguimiento");
   });
 
   it("shows — when there is no room/area and translates every status", () => {
@@ -15,9 +15,9 @@ describe("incident WhatsApp message", () => {
   });
 
   it("opens WhatsApp without a number so the employee picks the recipient", () => {
-    const url = whatsappShareUrl("🏨 Hotel Yuli — Incidencia\nHab 5");
+    const url = whatsappShareUrl("\u{1F3E8} Hotel Yuli — Incidencia\nHab 5");
     expect(url.startsWith("https://wa.me/?text=")).toBe(true);
-    expect(decodeURIComponent(url.split("?text=")[1])).toBe("🏨 Hotel Yuli — Incidencia\nHab 5");
+    expect(decodeURIComponent(url.split("?text=")[1])).toBe("\u{1F3E8} Hotel Yuli — Incidencia\nHab 5");
   });
 });
 

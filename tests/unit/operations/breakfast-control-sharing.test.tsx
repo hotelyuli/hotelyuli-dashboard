@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -98,5 +98,19 @@ describe("/breakfast/control never writes to the database", () => {
   it("the page only reads", () => {
     const source = readFileSync(path.join(root, files[0]), "utf8");
     expect(source.match(/supabase\.from\("[a-z_]+"\)\.(\w+)/g)?.map((call) => call.split(".").pop())).toEqual(["select", "select", "select", "select"]);
+  });
+});
+
+describe("WhatsApp texto link", () => {
+  const original = window.matchMedia;
+  beforeEach(() => { window.matchMedia = ((query: string) => ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia; });
+  afterEach(() => { cleanup(); window.matchMedia = original; });
+  it("is https://wa.me/?text= + encodeURIComponent(text), emoji intact", () => {
+    const text = "Control de desayunos \u00B7 s\u00E1b 03/10/2026\n\n5 \u00B7 Jos\u00E9 P\u00E9rez \u00B7 2 pax \u00B7 \u2705 DESAYUNO INCLUIDO \u00B7 \u{1F961} para llevar 06:30";
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text={text} locale="es" />);
+    const href = screen.getByText("WhatsApp texto").closest("a")!.getAttribute("href")!;
+    expect(href).toBe("https://wa.me/?text=" + encodeURIComponent(text));
+    expect(href).toContain("%E2%9C%85%20DESAYUNO%20INCLUIDO");
+    expect(decodeURIComponent(href.slice("https://wa.me/?text=".length))).toBe(text);
   });
 });

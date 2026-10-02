@@ -51,8 +51,8 @@ describe("formatBreakfastControl", () => {
       entry({ room: "20", beds: true, sortOrder: 21, guestName: "Eva", pax: 1, toGo: true, toGoTime: "06:30:00" }),
       entry({ room: "5", sortOrder: 5, guestName: "Ana", pax: 2, toGo: true })
     ] });
-    expect(lines(text)).toContain("20 camas · Tom / Eva · 2 pax · 🥡 para llevar 06:30");
-    expect(lines(text)).toContain("5 · Ana · 2 pax · 🥡 para llevar");
+    expect(lines(text)).toContain("20 camas · Tom / Eva · 2 pax · \u{1F961} para llevar 06:30");
+    expect(lines(text)).toContain("5 · Ana · 2 pax · \u{1F961} para llevar");
   });
 
   it("marks an included room, with covers when a baby does not eat, and notes", () => {
@@ -60,8 +60,8 @@ describe("formatBreakfastControl", () => {
       entry({ room: "11", sortOrder: 11, guestName: "Dana Levi", pax: 3, breakfastIncluded: true, breakfastPax: 3, notes: "Sin gluten" }),
       entry({ room: "14", sortOrder: 14, guestName: "Kim Park", pax: 3, breakfastIncluded: true, breakfastPax: 2 })
     ] });
-    expect(lines(text)).toContain("11 · Dana Levi · 3 pax · ✅ DESAYUNO INCLUIDO · 📝 Sin gluten");
-    expect(lines(text)).toContain("14 · Kim Park · 3 pax · ✅ DESAYUNO INCLUIDO (2 pax)");
+    expect(lines(text)).toContain("11 · Dana Levi · 3 pax · \u2705 DESAYUNO INCLUIDO · \u{1F4DD} Sin gluten");
+    expect(lines(text)).toContain("14 · Kim Park · 3 pax · \u2705 DESAYUNO INCLUIDO (2 pax)");
   });
 
   it("totals: all listed guests, included covers and rooms (Room 20 counts once); no currencies", () => {
@@ -156,5 +156,32 @@ describe("displayGuestName", () => {
     expect(lines(text)).toContain("1 · Sofía Vargas · 3 pax");
     expect(lines(text)).toContain("20 camas · Tom Becker / Eva · 2 pax");
     expect(lines(text)).toContain("Libres: 2");
+  });
+});
+
+describe("text for Copiar texto / WhatsApp: emoji survive encoding", () => {
+  const text = fmt({ date: D, free: [], entries: [
+    entry({ room: "5", sortOrder: 5, guestName: "Pérez Ñúñez, José \u{1F334}", pax: 2, breakfastIncluded: true, breakfastPax: 2, toGo: true, toGoTime: "06:30:00", notes: "Sin gluten \u26A0\uFE0F" }),
+    entry({ room: "20", beds: true, sortOrder: 20, guestName: "Tom", pax: 1, breakfastIncluded: true, breakfastPax: 1 })
+  ] });
+
+  it("has no replacement characters or broken surrogate pairs", () => {
+    expect(text).not.toContain("\uFFFD");
+    expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+
+  it("contains the expected emoji", () => {
+    expect(text).toContain("\u2705 DESAYUNO INCLUIDO");
+    expect(text).toContain("\u{1F961} para llevar 06:30");
+    expect(text).toContain("\u{1F4DD} Sin gluten \u26A0\uFE0F");
+    // "Apellido, Nombre" flip keeps an emoji in the name whole
+    expect(text).toContain("5 · José \u{1F334} Pérez Ñúñez · 2 pax · \u2705 DESAYUNO INCLUIDO");
+  });
+
+  it("encodeURIComponent succeeds and round-trips (WhatsApp link)", () => {
+    const encoded = encodeURIComponent(text);
+    expect(encoded).toContain("%E2%9C%85%20DESAYUNO%20INCLUIDO");
+    expect(encoded).not.toContain("%EF%BF%BD");
+    expect(decodeURIComponent(encoded)).toBe(text);
   });
 });

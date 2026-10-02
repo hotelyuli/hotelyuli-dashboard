@@ -39,7 +39,7 @@ export function TeamHeader({ locale, shift, assignment }: { locale: Locale; shif
         <form action={saveDailyTeam}>
           <div className="team-fields">
             <StaffSelect icon={<Sun size={20} />} title={t.morning} label={t.receptionist} name="morningReceptionist" values={receptionists} initial={assignment.morning_receptionist} other={t.other} />
-            <StaffSelect icon={<span aria-hidden="true">🏨</span>} title={t.afternoon} label={t.receptionist} name="afternoonReceptionist" values={receptionists} initial={assignment.afternoon_receptionist} other={t.other} />
+            <StaffSelect icon={<span aria-hidden="true">{"\u{1F3E8}"}</span>} title={t.afternoon} label={t.receptionist} name="afternoonReceptionist" values={receptionists} initial={assignment.afternoon_receptionist} other={t.other} />
             <StaffSelect icon={<Moon size={20} />} title={t.nightGuard} label={t.security} name="securityGuard" values={guards} initial={assignment.security_guard} other={t.other} />
           </div>
           <p className="team-note">{t.teamSaveNote}</p>

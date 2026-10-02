@@ -21,7 +21,7 @@ describe("daily income summary", () => {
 
   it("lists one line per method that has entries, with totals per currency", () => {
     expect(summary).toBe([
-      "💰 HOTEL YULI", "Ingresos del día", "martes, 23 de septiembre de 2026", "",
+      "\u{1F4B0} HOTEL YULI", "Ingresos del día", "martes, 23 de septiembre de 2026", "",
       "Card: $150.00",
       "Cash USD: $30.00",
       "Cash CRC: CRC 5,000",

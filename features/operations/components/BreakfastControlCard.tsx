@@ -15,7 +15,7 @@ export function BreakfastControlCard({ id, date, generatedAt, summary }: { id?: 
         </header>
         <div className="bk-scroll">
           <table className="bk-table">
-            <thead><tr><th>Hab.</th><th>Huésped</th><th className="c">Pax</th><th>Desayuno</th><th>Observaciones</th><th className="c">✓</th></tr></thead>
+            <thead><tr><th>Hab.</th><th>Huésped</th><th className="c">Pax</th><th>Desayuno</th><th>Observaciones</th><th className="c">{"\u2713"}</th></tr></thead>
             <tbody>
               {summary.lines.length ? summary.lines.map((line, index) => (
                 <tr key={`${line.label}-${index}`} data-room={line.label}>
@@ -23,10 +23,10 @@ export function BreakfastControlCard({ id, date, generatedAt, summary }: { id?: 
                   <td className="bk-guest">{line.names.length ? line.names.join(" / ") : "—"}</td>
                   <td className="bk-pax c">{line.pax}</td>
                   <td>
-                    {line.included && <span className="bk-pill">☕ INCLUIDO{line.breakfastPax !== line.pax ? ` (${line.breakfastPax})` : ""}</span>}
-                    {line.toGo && <span className="bk-togo">🥡 {line.toGoTime ?? "para llevar"}</span>}
+                    {line.included && <span className="bk-pill">{"\u2615 INCLUIDO"}{line.breakfastPax !== line.pax ? ` (${line.breakfastPax})` : ""}</span>}
+                    {line.toGo && <span className="bk-togo">{`\u{1F961} ${line.toGoTime ?? "para llevar"}`}</span>}
                   </td>
-                  <td className="bk-note">{line.notes.length ? `⚠️ ${line.notes.join(" / ")}` : null}</td>
+                  <td className="bk-note">{line.notes.length ? `\u26A0\uFE0F ${line.notes.join(" / ")}` : null}</td>
                   <td className="c"><span className="bk-box" /></td>
                 </tr>
               )) : <tr><td colSpan={6} className="bk-empty">Sin huéspedes para el desayuno.</td></tr>}

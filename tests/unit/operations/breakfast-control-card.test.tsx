@@ -58,7 +58,7 @@ describe("Control de desayunos card vs text", () => {
 
   it("is always in Spanish: columns, totals, header and footer", () => {
     setup();
-    expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Hab.", "Huésped", "Pax", "Desayuno", "Observaciones", "✓"]);
+    expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Hab.", "Huésped", "Pax", "Desayuno", "Observaciones", "\u2713"]);
     expect(screen.getByText("Total huéspedes en el hotel")).toBeInTheDocument();
     expect(screen.getByText("Desayunos incluidos")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Control de desayunos" })).toBeInTheDocument();
@@ -67,13 +67,13 @@ describe("Control de desayunos card vs text", () => {
     expect(screen.getByRole("contentinfo").textContent).toBe("Hotel Yuli · YuliOS");
   });
 
-  it("row details: name flipped, included pill, to-go time, ⚠️ note, empty checkbox", () => {
+  it("row details: name flipped, included pill, to-go time, \u26A0\uFE0F note, empty checkbox", () => {
     setup();
     const row = (label: string) => screen.getAllByRole("row").find((r) => r.getAttribute("data-room") === label)!;
     expect(within(row("1")).getAllByRole("cell")[1].textContent).toBe("Sofía Vargas");
-    expect(within(row("11")).getAllByRole("cell")[3].textContent).toBe("☕ INCLUIDO (2)");
-    expect(within(row("20 camas")).getAllByRole("cell")[3].textContent).toBe("☕ INCLUIDO (1)🥡 06:30");
-    expect(within(row("20 camas")).getAllByRole("cell")[4].textContent).toBe("⚠️ Sin gluten");
+    expect(within(row("11")).getAllByRole("cell")[3].textContent).toBe("\u2615 INCLUIDO (2)");
+    expect(within(row("20 camas")).getAllByRole("cell")[3].textContent).toBe("\u2615 INCLUIDO (1)\u{1F961} 06:30");
+    expect(within(row("20 camas")).getAllByRole("cell")[4].textContent).toBe("\u26A0\uFE0F Sin gluten");
     expect(within(row("3")).getAllByRole("cell")[4].textContent).toBe(""); // blank space to write in
     expect(row("3").querySelector(".bk-box")).not.toBeNull();
   });

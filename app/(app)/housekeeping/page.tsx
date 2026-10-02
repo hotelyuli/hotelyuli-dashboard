@@ -35,7 +35,7 @@ export default async function HousekeepingPage() {
     if (key && key in groups) groups[key as keyof typeof groups].push(label);
   }
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["🧹 HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `🔴 ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `🟡 ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `🟢 ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
+  const message = ["\u{1F9F9} HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `\u{1F534} ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `\u{1F7E1} ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `\u{1F7E2} ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
 
   return (
     <main className="dashboard-page">
