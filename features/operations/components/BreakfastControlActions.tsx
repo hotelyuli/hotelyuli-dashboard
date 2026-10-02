@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { fitImageToPage } from "@/features/reports/logic/pdf-fit";
-import { breakfastPdfName, shareOrDownload } from "@/features/reports/logic/share-file";
+import { breakfastPdfName, breakfastPngName, shareOrDownload } from "@/features/reports/logic/share-file";
 import type { Locale } from "@/lib/i18n";
 
 // Width of the printable A4 area (190 mm) at 96 dpi, so the PDF and the image match the printout.
@@ -14,16 +14,27 @@ const subscribePhone = (onChange: () => void) => {
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 };
+/** Phones that can share a PDF file (navigator.canShare with files). */
+function canSharePdf() {
+  if (!window.matchMedia(PHONE_QUERY).matches || typeof navigator.canShare !== "function") return false;
+  try {
+    return navigator.canShare({ files: [new File(["%PDF"], "desayunos.pdf", { type: "application/pdf" })] });
+  } catch {
+    return false;
+  }
+}
 
-/** Renders a copy of the card at A4 width with the print look (.pdf-capture), then removes it. */
+/** Renders a copy of the same sheet at A4 printable width (fonts loaded), then removes it. */
 async function withPrintCopy<T>(targetId: string, render: (node: HTMLElement) => Promise<T>) {
   const card = document.getElementById(targetId);
   if (!card) throw new Error("CARD_NOT_FOUND");
+  await document.fonts.ready;
   const host = document.createElement("div");
-  host.className = "pdf-capture";
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${CAPTURE_WIDTH_PX}px;background:#fff`;
   const copy = card.cloneNode(true) as HTMLElement;
   copy.removeAttribute("id");
+  // The on-screen top margin would shift the capture down and cut off the footer.
+  copy.style.margin = "0";
   host.appendChild(copy);
   document.body.appendChild(host);
   try {
@@ -71,7 +82,7 @@ function downloadFile(file: File) {
  */
 export function BreakfastControlActions({ targetId, date, text, locale }: { targetId: string; date: string; text: string; locale: Locale }) {
   const es = locale === "es";
-  const isPhone = useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+  const canShare = useSyncExternalStore(subscribePhone, canSharePdf, () => false);
   const [busy, setBusy] = useState<"" | "pdf" | "share" | "image">("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -85,7 +96,7 @@ export function BreakfastControlActions({ targetId, date, text, locale }: { targ
       setNotice(await task());
     } catch {
       setError(kind === "image"
-        ? (es ? "No se pudo copiar la imagen. Use Descargar PDF." : "Could not copy the image. Use Download PDF.")
+        ? (es ? "No se pudo crear la imagen. Use Descargar PDF." : "Could not create the image. Use Download PDF.")
         : (es ? "No se pudo crear el PDF. Use Imprimir." : "Could not create the PDF. Use Print."));
     } finally {
       setBusy("");
@@ -102,11 +113,20 @@ export function BreakfastControlActions({ targetId, date, text, locale }: { targ
     return result === "downloaded" ? (es ? "Este teléfono no comparte archivos: PDF descargado." : "This phone can't share files: PDF downloaded.") : "";
   });
 
+  // Copies the sheet as a picture; where the browser can't copy images, downloads the PNG instead.
   const copyImage = () => run("image", async () => {
-    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("UNSUPPORTED");
-    // Safari needs the ClipboardItem created synchronously in the click, with a promise for the data.
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": cardPng(targetId) })]);
-    return es ? "Imagen copiada." : "Image copied.";
+    const png = cardPng(targetId);
+    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      try {
+        // Safari needs the ClipboardItem created synchronously in the click, with a promise for the data.
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+        return es ? "Imagen copiada." : "Image copied.";
+      } catch {
+        // fall through to the download
+      }
+    }
+    downloadFile(new File([await png], breakfastPngName(date), { type: "image/png" }));
+    return es ? "No se puede copiar imágenes aquí: PNG descargado." : "Images can't be copied here: PNG downloaded.";
   });
 
   async function copyText() {
@@ -122,7 +142,7 @@ export function BreakfastControlActions({ targetId, date, text, locale }: { targ
   return (
     <div className="message-actions breakfast-control-actions">
       <button className="primary-button" type="button" onClick={downloadPdf} disabled={busy !== ""}>{busy === "pdf" ? (es ? "Creando PDF…" : "Creating PDF…") : (es ? "Descargar PDF" : "Download PDF")}</button>
-      {isPhone && <button className="secondary-button" type="button" onClick={sharePdf} disabled={busy !== ""}>{busy === "share" ? (es ? "Preparando…" : "Preparing…") : (es ? "Compartir" : "Share")}</button>}
+      {canShare && <button className="secondary-button" type="button" onClick={sharePdf} disabled={busy !== ""}>{busy === "share" ? (es ? "Preparando…" : "Preparing…") : (es ? "Compartir" : "Share")}</button>}
       <button className="secondary-button" type="button" onClick={() => window.print()}>{es ? "Imprimir" : "Print"}</button>
       <button className="secondary-button" type="button" onClick={copyImage} disabled={busy !== ""}>{busy === "image" ? (es ? "Copiando…" : "Copying…") : (es ? "Copiar imagen" : "Copy image")}</button>
       <button className="secondary-button" type="button" onClick={copyText}>{es ? "Copiar texto" : "Copy text"}</button>

@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { render, screen, cleanup } from "@testing-library/react";
 import { BreakfastControlActions } from "@/features/operations/components/BreakfastControlActions";
-import { breakfastPdfName, shareOrDownload } from "@/features/reports/logic/share-file";
+import { breakfastPdfName, breakfastPngName, shareOrDownload } from "@/features/reports/logic/share-file";
 
 const pdf = () => new File(["%PDF"], breakfastPdfName("2026-10-03"), { type: "application/pdf" });
 
 describe("breakfast PDF sharing", () => {
-  it("names the file desayunos-YYYY-MM-DD.pdf", () => expect(breakfastPdfName("2026-10-03")).toBe("desayunos-2026-10-03.pdf"));
+  it("names the files desayunos-YYYY-MM-DD.pdf / .png", () => {
+    expect(breakfastPdfName("2026-10-03")).toBe("desayunos-2026-10-03.pdf");
+    expect(breakfastPngName("2026-10-03")).toBe("desayunos-2026-10-03.png");
+  });
 
   it("shares the PDF file itself when the phone can share files", async () => {
     const share = vi.fn().mockResolvedValue(undefined);
@@ -49,17 +52,27 @@ describe("BreakfastControlActions", () => {
   const original = window.matchMedia;
   const pointer = (coarse: boolean) => { window.matchMedia = ((query: string) => ({ matches: coarse, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia; };
   const labels = () => screen.getAllByRole("button").concat(screen.getAllByRole("link")).map((el) => el.textContent);
-  afterEach(() => { cleanup(); window.matchMedia = original; });
+  const canShareFiles = (supported: boolean | undefined) => { Object.defineProperty(navigator, "canShare", { configurable: true, value: supported === undefined ? undefined : (data: ShareData) => supported && !!data.files?.[0] && data.files[0].type === "application/pdf" }); };
+  afterEach(() => { cleanup(); window.matchMedia = original; canShareFiles(undefined); });
 
-  it("phones: Descargar PDF · Compartir · Imprimir · Copiar imagen · Copiar texto · WhatsApp texto", () => {
+  it("phones that can share files: Descargar PDF · Compartir · Imprimir · Copiar imagen · Copiar texto · WhatsApp texto", () => {
     pointer(true);
+    canShareFiles(true);
     render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
     expect(labels()).toEqual(["Descargar PDF", "Compartir", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);
     expect(screen.getByText("Descargar PDF")).toHaveClass("primary-button");
     expect(screen.getByText("WhatsApp texto").closest("a")).toHaveAttribute("href", "https://wa.me/?text=Control");
   });
 
-  it("desktop: no Compartir, and no save button", () => {
+  it("phones that cannot share files: no Compartir", () => {
+    pointer(true);
+    canShareFiles(false);
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
+    expect(labels()).toEqual(["Descargar PDF", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);
+  });
+
+  it("desktop: no Compartir even if the browser can share, and no save button", () => {
+    canShareFiles(true);
     pointer(false);
     render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
     expect(labels()).toEqual(["Descargar PDF", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);

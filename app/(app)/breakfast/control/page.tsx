@@ -53,7 +53,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
         </div>
         <BreakfastControlActions targetId="breakfast-control-card" date={day} text={message} locale={locale} />
       </div>
-      <BreakfastControlCard date={day} summary={summary} locale={locale} />
+      <BreakfastControlCard id="breakfast-control-card" date={day} generatedAt={new Date()} summary={summary} />
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>
     </main>
   );

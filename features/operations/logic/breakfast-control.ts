@@ -1,3 +1,4 @@
+import { formatInTimeZone } from "date-fns-tz";
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
 
 /**
@@ -41,6 +42,20 @@ export function displayGuestName(name: string) {
   const last = name.slice(0, comma).trim();
   const first = name.slice(comma + 1).trim();
   return [first, last].filter(Boolean).join(" ").replace(/\s+/g, " ");
+}
+
+const WEEKDAYS_LONG = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+/** "2026-10-03" -> "sábado 03/10/2026" (sheet header). */
+export function controlLongDateLabel(isoDate: string) {
+  const weekday = WEEKDAYS_LONG[new Date(`${isoDate}T00:00:00Z`).getUTCDay()];
+  return `${weekday} ${isoDate.slice(8, 10)}/${isoDate.slice(5, 7)}/${isoDate.slice(0, 4)}`;
+}
+
+/** When the sheet was generated, in Costa Rica time: "jue 02/10/2026 · 12:40". */
+export function generatedLabel(at: Date) {
+  const [day, time] = formatInTimeZone(at, "America/Costa_Rica", "yyyy-MM-dd HH:mm").split(" ");
+  return `${controlDateLabel(day)} · ${time}`;
 }
 
 /** "2026-09-30" -> "mié 30/09/2026" */
