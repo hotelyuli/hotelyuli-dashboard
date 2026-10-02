@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { MessageActions } from "@/features/reports/components/MessageActions";
+import { formatBreakfastReport, formatBreakfastReportWhatsApp } from "@/features/operations/logic/breakfast-report";
 import type { Locale } from "@/lib/i18n";
 
 export const metadata = { title: "Breakfast" };
@@ -24,11 +25,13 @@ export default async function BreakfastPage() {
   const total = rows.reduce((sum, row) => sum + row.breakfast_pax, 0);
   const es = locale === "es";
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["\u{1F950} HOTEL YULI", es ? "Desayuno" : "Breakfast", dateLabel, "", ...rows.map((row) => `${roomById.get(row.room_id)?.display_name ?? "—"} · ${row.guest_name ?? "—"} · ${row.breakfast_pax} pax${row.breakfast_to_go ? ` · ${es ? "Para llevar" : "To go"}` : ""}${row.breakfast_notes ? ` · ${row.breakfast_notes}` : ""}`), "", `${es ? "Total" : "Total covers"}: ${total} pax`].join("\n");
+  const reportParams = { es, dateLabel, rows: rows.map((row) => ({ room: roomById.get(row.room_id)?.display_name ?? null, guest: row.guest_name, pax: row.breakfast_pax, toGo: row.breakfast_to_go, notes: row.breakfast_notes })) };
+  const message = formatBreakfastReport(reportParams);
+  const whatsappMessage = formatBreakfastReportWhatsApp(reportParams);
 
   return (
     <main className="dashboard-page">
-      <div className="page-heading"><div><p className="eyebrow">{es ? "RESTAURANTE" : "RESTAURANT"}</p><h1>{es ? "Reporte de desayuno" : "Breakfast report"}</h1><p>{es ? `${total} desayunos incluidos para hoy.` : `${total} included breakfast covers today.`}</p></div><div className="message-actions"><MessageActions text={message} locale={locale} /><Link className="secondary-button" href="/breakfast/control">{es ? "Lista para restaurante" : "Restaurant list"}</Link></div></div>
+      <div className="page-heading"><div><p className="eyebrow">{es ? "RESTAURANTE" : "RESTAURANT"}</p><h1>{es ? "Reporte de desayuno" : "Breakfast report"}</h1><p>{es ? `${total} desayunos incluidos para hoy.` : `${total} included breakfast covers today.`}</p></div><div className="message-actions"><MessageActions text={message} whatsappText={whatsappMessage} locale={locale} /><Link className="secondary-button" href="/breakfast/control">{es ? "Lista para restaurante" : "Restaurant list"}</Link></div></div>
       <div className="board-table-wrap">
         <table className="board-table"><thead><tr><th>{es ? "Habitación" : "Room"}</th><th>{es ? "Huésped" : "Guest"}</th><th>Pax</th><th>{es ? "Para llevar" : "To go"}</th><th>{es ? "Notas" : "Notes"}</th></tr></thead>
           <tbody>{rows.length ? rows.map((row) => <tr key={row.room_id}><td><strong>{roomById.get(row.room_id)?.display_name ?? "—"}</strong></td><td>{row.guest_name ?? "—"}</td><td>{row.breakfast_pax}</td><td>{row.breakfast_to_go ? (es ? "Sí" : "Yes") : "—"}</td><td>{row.breakfast_notes ?? "—"}</td></tr>) : <tr><td colSpan={5} className="empty-table-cell">{es ? "No hay desayunos incluidos registrados para hoy." : "No included breakfasts are registered for today."}</td></tr>}</tbody>

@@ -1,5 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
+import { sanitize } from "@/features/reports/logic/whatsapp-text";
 
 /**
  * "Control de desayunos": the list for breakfast on date D, sent the day before.
@@ -161,12 +162,8 @@ function formatLine(line: ControlLine) {
  * from a wa.me link as replacement characters.
  */
 export function latin1Only(text: string) {
-  let out = "";
-  for (const ch of text) {
-    if (ch.codePointAt(0)! <= 0xff) { out += ch; continue; }
-    for (const part of ch.normalize("NFD")) if (part.codePointAt(0)! <= 0xff) out += part;
-  }
-  return out.replace(/\s+/g, " ").trim();
+  // single-line fields (names, notes): the shared WhatsApp sanitizer, then one line
+  return sanitize(text).replace(/\s+/g, " ").trim();
 }
 
 function formatWhatsAppLine(line: ControlLine) {
