@@ -58,7 +58,7 @@ describe("BreakfastControlActions", () => {
   it("phones that can share files: Descargar PDF · Compartir · Imprimir · Copiar imagen · Copiar texto · WhatsApp texto", () => {
     pointer(true);
     canShareFiles(true);
-    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" whatsappText="Control" locale="es" />);
     expect(labels()).toEqual(["Descargar PDF", "Compartir", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);
     expect(screen.getByText("Descargar PDF")).toHaveClass("primary-button");
     expect(screen.getByText("WhatsApp texto").closest("a")).toHaveAttribute("href", "https://wa.me/?text=Control");
@@ -67,14 +67,14 @@ describe("BreakfastControlActions", () => {
   it("phones that cannot share files: no Compartir", () => {
     pointer(true);
     canShareFiles(false);
-    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" whatsappText="Control" locale="es" />);
     expect(labels()).toEqual(["Descargar PDF", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);
   });
 
   it("desktop: no Compartir even if the browser can share, and no save button", () => {
     canShareFiles(true);
     pointer(false);
-    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" locale="es" />);
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text="Control" whatsappText="Control" locale="es" />);
     expect(labels()).toEqual(["Descargar PDF", "Imprimir", "Copiar imagen", "Copiar texto", "WhatsApp texto"]);
     expect(screen.queryByText(/Guardar/)).toBeNull();
   });
@@ -105,12 +105,13 @@ describe("WhatsApp texto link", () => {
   const original = window.matchMedia;
   beforeEach(() => { window.matchMedia = ((query: string) => ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia; });
   afterEach(() => { cleanup(); window.matchMedia = original; });
-  it("is https://wa.me/?text= + encodeURIComponent(text), emoji intact", () => {
+  it("uses the emoji-free WhatsApp text: https://wa.me/?text= + encodeURIComponent(whatsappText)", () => {
     const text = "Control de desayunos \u00B7 s\u00E1b 03/10/2026\n\n5 \u00B7 Jos\u00E9 P\u00E9rez \u00B7 2 pax \u00B7 \u2705 DESAYUNO INCLUIDO \u00B7 \u{1F961} para llevar 06:30";
-    render(<BreakfastControlActions targetId="card" date="2026-10-03" text={text} locale="es" />);
+    const whatsappText = "*Control de desayunos \u00B7 s\u00E1b 03/10/2026*\n\n5 \u00B7 Jos\u00E9 P\u00E9rez \u00B7 2 pax \u00B7 *DESAYUNO INCLUIDO* (para llevar 06:30)";
+    render(<BreakfastControlActions targetId="card" date="2026-10-03" text={text} whatsappText={whatsappText} locale="es" />);
     const href = screen.getByText("WhatsApp texto").closest("a")!.getAttribute("href")!;
-    expect(href).toBe("https://wa.me/?text=" + encodeURIComponent(text));
-    expect(href).toContain("%E2%9C%85%20DESAYUNO%20INCLUIDO");
-    expect(decodeURIComponent(href.slice("https://wa.me/?text=".length))).toBe(text);
+    expect(href).toBe("https://wa.me/?text=" + encodeURIComponent(whatsappText));
+    expect(href).not.toContain("%E2%9C%85"); // no check-mark emoji in the link
+    expect(decodeURIComponent(href.slice("https://wa.me/?text=".length))).toBe(whatsappText);
   });
 });

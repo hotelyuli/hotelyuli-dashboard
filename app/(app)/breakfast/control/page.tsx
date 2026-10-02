@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { BreakfastControlActions } from "@/features/operations/components/BreakfastControlActions";
 import { selectedTourDay } from "@/features/records/logic/tour-day";
-import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, freeRooms, summarizeBreakfastControl, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
+import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, formatBreakfastControlWhatsApp, freeRooms, summarizeBreakfastControl, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
 import { BreakfastControlCard } from "@/features/operations/components/BreakfastControlCard";
 import type { Locale } from "@/lib/i18n";
 
@@ -51,7 +51,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
             {day !== tomorrow && <a className="secondary-button" href="/breakfast/control">{es ? "Mañana" : "Tomorrow"}</a>}
           </form>
         </div>
-        <BreakfastControlActions targetId="breakfast-control-card" date={day} text={message} locale={locale} />
+        <BreakfastControlActions targetId="breakfast-control-card" date={day} text={message} whatsappText={formatBreakfastControlWhatsApp({ date: day, summary })} locale={locale} />
       </div>
       <BreakfastControlCard id="breakfast-control-card" date={day} generatedAt={new Date()} summary={summary} />
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>

@@ -79,8 +79,10 @@ function downloadFile(file: File) {
 /**
  * Sharing for the restaurant. Everything happens in the browser: nothing is saved to the database.
  * Order: Descargar PDF · Compartir (phones) · Imprimir · Copiar imagen · Copiar texto · WhatsApp texto.
+ * `text` (with emoji) is for Copiar texto; `whatsappText` is the emoji-free version for the wa.me link,
+ * because WhatsApp Desktop on Windows shows emoji from the link as U+FFFD.
  */
-export function BreakfastControlActions({ targetId, date, text, locale }: { targetId: string; date: string; text: string; locale: Locale }) {
+export function BreakfastControlActions({ targetId, date, text, whatsappText, locale }: { targetId: string; date: string; text: string; whatsappText: string; locale: Locale }) {
   const es = locale === "es";
   const canShare = useSyncExternalStore(subscribePhone, canSharePdf, () => false);
   const [busy, setBusy] = useState<"" | "pdf" | "share" | "image">("");
@@ -146,7 +148,7 @@ export function BreakfastControlActions({ targetId, date, text, locale }: { targ
       <button className="secondary-button" type="button" onClick={() => window.print()}>{es ? "Imprimir" : "Print"}</button>
       <button className="secondary-button" type="button" onClick={copyImage} disabled={busy !== ""}>{busy === "image" ? (es ? "Copiando…" : "Copying…") : (es ? "Copiar imagen" : "Copy image")}</button>
       <button className="secondary-button" type="button" onClick={copyText}>{es ? "Copiar texto" : "Copy text"}</button>
-      <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon />{es ? "WhatsApp texto" : "WhatsApp text"}</a>
+      <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(whatsappText)}`} target="_blank" rel="noopener noreferrer"><WhatsAppIcon />{es ? "WhatsApp texto" : "WhatsApp text"}</a>
       {notice && <p role="status">{notice}</p>}
       {error && <p role="alert">{error}</p>}
     </div>

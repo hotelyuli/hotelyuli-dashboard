@@ -155,7 +155,44 @@ function formatLine(line: ControlLine) {
   return parts.join(" · ");
 }
 
-/** Plain text for Copiar / WhatsApp / Imprimir, built from the same summary as the page card. */
+/**
+ * Keeps text inside Latin-1 (code points up to 0xFF): Spanish letters stay, other accented letters
+ * lose their accent, emoji and other symbols are dropped. WhatsApp Desktop on Windows shows emoji
+ * from a wa.me link as replacement characters.
+ */
+export function latin1Only(text: string) {
+  let out = "";
+  for (const ch of text) {
+    if (ch.codePointAt(0)! <= 0xff) { out += ch; continue; }
+    for (const part of ch.normalize("NFD")) if (part.codePointAt(0)! <= 0xff) out += part;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
+function formatWhatsAppLine(line: ControlLine) {
+  const names = line.names.map(latin1Only).filter(Boolean);
+  let text = [line.label, names.length ? names.join(" / ") : "-", `${line.pax} pax`].join(" · ");
+  if (line.included) text += ` · *DESAYUNO INCLUIDO*${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`;
+  if (line.toGo) text += ` (para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""})`;
+  const notes = line.notes.map(latin1Only).filter(Boolean);
+  if (notes.length) text += ` · ALERGIA/NOTA: ${notes.join(" / ")}`;
+  return text;
+}
+
+/** Emoji-free text for the WhatsApp link only (bold with *asterisks*); Copiar texto keeps the emoji version. */
+export function formatBreakfastControlWhatsApp({ date, summary }: { date: string; summary: ControlSummary }) {
+  return [
+    `*Control de desayunos · ${controlDateLabel(date)}*`,
+    "",
+    ...(summary.lines.length ? summary.lines.map(formatWhatsAppLine) : ["Sin huéspedes para el desayuno."]),
+    `Libres: ${freeLabel(summary.free)}`,
+    "",
+    `*Total huéspedes en el hotel: ${summary.guests} pax*`,
+    `*Con desayuno incluido: ${summary.includedPax} pax (${summary.includedRooms} hab.)*`
+  ].join("\n");
+}
+
+/** Plain text for Copiar texto (with emoji), built from the same summary as the page card. */
 export function formatBreakfastControl({ date, summary }: { date: string; summary: ControlSummary }) {
   return [
     `Control de desayunos · ${controlDateLabel(date)}`,
