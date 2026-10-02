@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, controlEntries, eatsBreakfastOn, formatBreakfastControl, freeRooms, summarizeBreakfastControl, type ControlEntry, type ControlReservation, type ControlUnit } from "@/features/operations/logic/breakfast-control";
+import { addDays, displayGuestName, controlEntries, eatsBreakfastOn, formatBreakfastControl, freeRooms, summarizeBreakfastControl, type ControlEntry, type ControlReservation, type ControlUnit } from "@/features/operations/logic/breakfast-control";
 
 // Breakfast date D = Wednesday 30/09/2026; "today" (the day the list is sent) = 29/09.
 const D = "2026-09-30";
@@ -41,7 +41,7 @@ describe("formatBreakfastControl", () => {
       entry({ room: "20", beds: true, sortOrder: 21, guestName: "Tom", pax: 1 }),
       entry({ room: "20", beds: true, sortOrder: 20, guestName: "Eva", pax: 1 })
     ] });
-    expect(lines(text)).toContain("20 (camas) · Tom / Eva · 2 pax");
+    expect(lines(text)).toContain("20 camas · Tom / Eva · 2 pax");
     expect(text.match(/^20 /gm)).toHaveLength(1);
   });
 
@@ -51,7 +51,7 @@ describe("formatBreakfastControl", () => {
       entry({ room: "20", beds: true, sortOrder: 21, guestName: "Eva", pax: 1, toGo: true, toGoTime: "06:30:00" }),
       entry({ room: "5", sortOrder: 5, guestName: "Ana", pax: 2, toGo: true })
     ] });
-    expect(lines(text)).toContain("20 (camas) · Tom / Eva · 2 pax · 🥡 para llevar 06:30");
+    expect(lines(text)).toContain("20 camas · Tom / Eva · 2 pax · 🥡 para llevar 06:30");
     expect(lines(text)).toContain("5 · Ana · 2 pax · 🥡 para llevar");
   });
 
@@ -136,5 +136,25 @@ describe("freeRooms", () => {
     const free = freeRooms(units, listed(["1", false], ["2", false], ["8", false], ["12", false], ["20", true]));
     expect(free).toEqual([]);
     expect(fmt({ date: D, entries: [], free })).toContain("\nLibres: ninguna\n");
+  });
+});
+
+describe("displayGuestName", () => {
+  it.each([
+    ["Mora Rojas, Ana María", "Ana María Mora Rojas"],
+    ["Levi,Dana", "Dana Levi"],
+    ["  Kim   Park ", "Kim Park"],
+    ["Smith, ", "Smith"]
+  ])("%s -> %s", (raw, shown) => expect(displayGuestName(raw)).toBe(shown));
+
+  it("is used in the list, and Room 20 reads '20 camas'", () => {
+    const text = fmt({ date: D, free: ["2"], entries: [
+      entry({ room: "1", guestName: "Vargas, Sofía", pax: 3 }),
+      entry({ room: "20", beds: true, sortOrder: 20, guestName: "Becker, Tom", pax: 1 }),
+      entry({ room: "20", beds: true, sortOrder: 21, guestName: "Eva", pax: 1 })
+    ] });
+    expect(lines(text)).toContain("1 · Sofía Vargas · 3 pax");
+    expect(lines(text)).toContain("20 camas · Tom Becker / Eva · 2 pax");
+    expect(lines(text)).toContain("Libres: 2");
   });
 });

@@ -38,7 +38,7 @@ describe("Control de desayunos card vs text", () => {
     const textLines = text.split("\n");
     const textRooms = textLines.slice(2, textLines.findIndex((line) => line.startsWith("Libres:"))).map((line) => line.split(" · ")[0]);
     const cardRooms = screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
-    expect(textRooms).toEqual(["1", "3", "11", "14", "20 (camas)"]);
+    expect(textRooms).toEqual(["1", "3", "11", "14", "20 camas"]);
     expect(cardRooms).toEqual(textRooms);
 
     // Free rooms.

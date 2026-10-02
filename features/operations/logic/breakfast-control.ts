@@ -34,6 +34,15 @@ export function addDays(isoDate: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/** Little Hotelier's "Apellido, Nombre" -> "Nombre Apellido"; names without a comma are kept. */
+export function displayGuestName(name: string) {
+  const comma = name.indexOf(",");
+  if (comma < 0) return name.trim().replace(/\s+/g, " ");
+  const last = name.slice(0, comma).trim();
+  const first = name.slice(comma + 1).trim();
+  return [first, last].filter(Boolean).join(" ").replace(/\s+/g, " ");
+}
+
 /** "2026-09-30" -> "mié 30/09/2026" */
 export function controlDateLabel(isoDate: string) {
   const weekday = WEEKDAYS[new Date(`${isoDate}T00:00:00Z`).getUTCDay()];
@@ -84,7 +93,7 @@ export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
   return [...rooms].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-/** One room line, shared by the page card and the text. Room 20 beds are merged into "20 (camas)". */
+/** One room line, shared by the page card and the text. Room 20 beds are merged into "20 camas". */
 export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[] };
 export type ControlSummary = { lines: ControlLine[]; free: string[]; guests: number; includedPax: number; includedRooms: number };
 
@@ -92,8 +101,8 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
   const lines = new Map<string, ControlLine>();
   entries.forEach((entry, index) => {
     const key = entry.beds ? `beds:${entry.room}` : `entry:${index}`;
-    const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} (camas)` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [] };
-    const name = entry.guestName?.trim();
+    const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} camas` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [] };
+    const name = entry.guestName ? displayGuestName(entry.guestName) : "";
     if (name && !line.names.includes(name)) line.names.push(name);
     if (entry.notes && !line.notes.includes(entry.notes)) line.notes.push(entry.notes);
     line.sortOrder = Math.min(line.sortOrder, entry.sortOrder);

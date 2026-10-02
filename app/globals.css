@@ -385,7 +385,10 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
 .incident-hint{margin:6px 0 0;font-size:12px;line-height:1.4;color:var(--muted)}
 .incident-modal footer{position:sticky;bottom:0;flex:none;display:flex;justify-content:flex-end;gap:.7rem;padding:16px 24px;border-top:1px solid var(--line);background:white}
 @media(prefers-reduced-motion:reduce){.segment span{transition:none}}
-.breakfast-control-card{margin-top:1.5rem;border:1px solid var(--line);border-radius:14px;background:white;overflow:hidden}
+.breakfast-control-card{margin-top:1.5rem;border:1px solid var(--line);border-radius:14px;background:white}
+.breakfast-control-card td:first-child{white-space:nowrap}
+/* Room for the fixed "install app" button so the totals never sit under it. */
+.breakfast-control-page{padding-bottom:6rem}
 .breakfast-control-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:1rem 1.2rem;border-bottom:1px solid var(--line)}
 .breakfast-control-head h2{margin:0;font-size:1.25rem}
 .breakfast-control-head p{margin:0;color:var(--muted)}
