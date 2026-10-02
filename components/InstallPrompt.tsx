@@ -17,7 +17,7 @@ export function InstallPrompt() {
   if (!showButton && !showIOS) return null;
 
   return (
-    <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: 50, display: "flex", alignItems: "flex-start", gap: 8 }}>
+    <div className="install-banner" style={{ position: "fixed", right: 16, bottom: 16, zIndex: 50, display: "flex", alignItems: "flex-start", gap: 8 }}>
       {showButton && (
         <button onClick={requestInstall} style={{ background: "#4D333E", color: "#fff", border: 0, borderRadius: 999, padding: "10px 16px", fontSize: 14 }}>
           Instalar YuliOS
