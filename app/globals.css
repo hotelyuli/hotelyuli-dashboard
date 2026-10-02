@@ -409,7 +409,16 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
   .breakfast-control-card .board-table{font-size:10.5px;white-space:normal}
   .breakfast-control-card .board-table th,.breakfast-control-card .board-table td{padding:.3rem .45rem}
   .breakfast-control-card tr{break-inside:avoid}
-  .breakfast-control-totals{padding:.6rem 0 0;border-top:0}
+  .breakfast-control-totals{padding:.6rem 0 0;border-top:0;grid-template-columns:repeat(2,minmax(0,1fr))}
   .breakfast-control-totals .record-summary-card{padding:.5rem .8rem}
   .breakfast-control-totals .record-summary-card strong{font-size:1.4rem}
 }
+/* Descargar PDF / Copiar imagen render a copy of the card inside .pdf-capture with the same rules as print. */
+.pdf-capture .breakfast-control-card{margin:0;border:0;border-radius:0}
+.pdf-capture .breakfast-control-head{padding:0 0 .5rem}
+.pdf-capture .board-table-scroll{overflow:visible}
+.pdf-capture .breakfast-control-card .board-table{font-size:10.5px;white-space:normal}
+.pdf-capture .breakfast-control-card .board-table th,.pdf-capture .breakfast-control-card .board-table td{padding:.3rem .45rem}
+.pdf-capture .breakfast-control-totals{padding:.6rem 0 0;border-top:0;grid-template-columns:repeat(2,minmax(0,1fr))}
+.pdf-capture .breakfast-control-totals .record-summary-card{padding:.5rem .8rem}
+.pdf-capture .breakfast-control-totals .record-summary-card strong{font-size:1.4rem}
