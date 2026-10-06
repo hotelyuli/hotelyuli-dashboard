@@ -4,6 +4,7 @@ import { tourCommission } from "./logic/tour-commission";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { flushSheetsSoon } from "@/features/sheets/export";
+import { notifyNewIncidentSoon } from "@/lib/push";
 import { formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { requireSession } from "@/features/auth/logic/guards";
@@ -66,6 +67,8 @@ export async function registerEvent(formData: FormData) {
     requires_follow_up: data.requiresFollowUp, created_by: user.id
   });
   if (error && error.code !== "23505") throw new Error("SAVE_FAILED");
+  // Only a fresh insert notifies: a retried submit (23505) was already announced.
+  if (!error) notifyNewIncidentSoon(profile.hotel_id, { id: data.clientId, roomArea: data.roomArea || null, category: data.category, priority: data.priority, description: data.description });
   revalidatePath("/events"); revalidatePath("/tasks"); revalidatePath("/dashboard");
 }
 

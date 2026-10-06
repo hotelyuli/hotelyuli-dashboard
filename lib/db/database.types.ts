@@ -11,6 +11,12 @@ export type Database = {
         Update: {name?:string;category?:string;phone?:string;notes?:string;operator_name?:string;updated_at?:string};
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: { id: string; hotel_id: string; user_id: string; endpoint: string; p256dh: string; auth: string; user_agent: string | null; created_at: string; last_success_at: string | null; failure_count: number };
+        Insert: { id?: string; hotel_id: string; user_id: string; endpoint: string; p256dh: string; auth: string; user_agent?: string | null; created_at?: string; last_success_at?: string | null; failure_count?: number };
+        Update: { last_success_at?: string | null; failure_count?: number };
+        Relationships: [];
+      };
       report_snapshots: {
         Row: { id:string; hotel_id:string; operation_date:string; report_kind:"breakfast"|"housekeeping"; locale:"en"|"es"; report_text:string; content_hash:string; created_by:string; created_at:string };
         Insert: { id?:string; hotel_id:string; operation_date:string; report_kind:"breakfast"|"housekeeping"; locale:"en"|"es"; report_text:string; content_hash:string; created_by:string; created_at?:string };

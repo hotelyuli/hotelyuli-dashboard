@@ -137,7 +137,15 @@ const messages = {
     kpiAvailable: "Disponibles",
     kpiOutOfService: "Fuera de servicio",
     paymentPending: "Pendiente",
-    paymentPaid: "Pagado"
+    paymentPaid: "Pagado",
+    notificationsEnable: "Activar notificaciones",
+    notificationsDisable: "Desactivar notificaciones",
+    notificationsBlocked: "Notificaciones bloqueadas en este navegador. Para activarlas, abre los ajustes del sitio (el candado junto a la dirección), permite las notificaciones y recarga la página.",
+    notificationsIosHint: "En iPhone: primero instala la app (Compartir → Añadir a pantalla de inicio)",
+    notificationsBanner: "Activa las notificaciones para recibir incidentes y tareas",
+    notificationsActivate: "Activar",
+    notificationsFailed: "No se pudieron activar las notificaciones. Inténtalo de nuevo.",
+    close: "Cerrar"
   },
   en: {
     loginTitle: "Welcome",
@@ -274,7 +282,15 @@ const messages = {
     kpiAvailable: "Available",
     kpiOutOfService: "Out of service",
     paymentPending: "Pending",
-    paymentPaid: "Paid"
+    paymentPaid: "Paid",
+    notificationsEnable: "Turn on notifications",
+    notificationsDisable: "Turn off notifications",
+    notificationsBlocked: "Notifications are blocked in this browser. To allow them, open the site settings (the lock next to the address), allow notifications and reload the page.",
+    notificationsIosHint: "On iPhone: install the app first (Share → Add to Home Screen)",
+    notificationsBanner: "Turn on notifications to receive incidents and tasks",
+    notificationsActivate: "Turn on",
+    notificationsFailed: "Notifications could not be turned on. Please try again.",
+    close: "Close"
   }
 } as const;
 

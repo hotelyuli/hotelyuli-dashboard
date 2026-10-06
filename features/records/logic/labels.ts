@@ -15,3 +15,7 @@ export function taskStatusLabel(status: string, lang: Lang): string {
 export function incidentStatusLabel(status: string, lang: Lang): string {
   return pick({ open: ["Pendiente", "Open"], follow_up: ["Seguimiento", "Follow-up"], temporary_solution: ["Solución temporal", "Temporary solution"], completed: ["Completado", "Completed"] }, status, lang);
 }
+
+export function incidentCategoryLabel(category: string, lang: Lang): string {
+  return pick({ arriving: ["Llegada", "Arriving"], departure: ["Salida", "Departure"], guest_request: ["Solicitud de huésped", "Guest request"], guest_complaint: ["Queja de huésped", "Guest complaint"], maintenance: ["Mantenimiento", "Maintenance"], security: ["Seguridad", "Security"], other: ["Otro", "Other"] }, category, lang);
+}

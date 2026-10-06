@@ -1,5 +1,6 @@
 import { BedDouble, CalendarCheck, CircleDollarSign, ClipboardCheck, Coffee, Waves } from "lucide-react";
 import { RegisterButton } from "@/features/records/components/RegisterForms";
+import { NotificationsBanner } from "@/components/NotificationsButton";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { dictionary, type Locale } from "@/lib/i18n";
@@ -114,6 +115,7 @@ export default async function DashboardPage() {
   ];
   return (
     <main className="reception-dashboard">
+      <NotificationsBanner locale={locale} />
       <section className="reception-imports" aria-label={es ? "Importación de datos" : "Data import"}><CsvImportPanel locale={locale} variant="bar" /></section>
       <div className="reception-columns">
         <div className="reception-main">

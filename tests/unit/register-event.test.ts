@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerEvent } from "@/features/records/actions";
 import { requireSession } from "@/features/auth/logic/guards";
+import { notifyNewIncidentSoon } from "@/lib/push";
 
 vi.mock("@/features/auth/logic/guards", () => ({ requireSession: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/push", () => ({ notifyNewIncidentSoon: vi.fn() }));
 
 const CLIENT_ID = "55555555-5555-4555-8555-555555555555";
 
@@ -33,17 +35,20 @@ describe("registerEvent", () => {
     await registerEvent(eventForm());
     expect(supabase.inserted.map((entry) => entry.table)).toEqual(["shift_events"]);
     expect(supabase.inserted[0].row).toMatchObject({ id: CLIENT_ID, status: "follow_up" });
+    expect(notifyNewIncidentSoon).toHaveBeenCalledWith("hotel-1", { id: CLIENT_ID, roomArea: "Hab 5", category: "maintenance", priority: "high", description: "AC leaking" });
   });
 
   it("a retried submit of the same incident (primary key conflict) succeeds without a second incident", async () => {
     const supabase = makeSupabase({ code: "23505" });
     vi.mocked(requireSession).mockResolvedValue({ supabase, user: { id: "user-1" } } as never);
     await expect(registerEvent(eventForm())).resolves.toBeUndefined();
+    expect(notifyNewIncidentSoon).not.toHaveBeenCalled();
   });
 
   it("still reports real failures", async () => {
     const supabase = makeSupabase({ code: "42501" });
     vi.mocked(requireSession).mockResolvedValue({ supabase, user: { id: "user-1" } } as never);
     await expect(registerEvent(eventForm())).rejects.toThrow("SAVE_FAILED");
+    expect(notifyNewIncidentSoon).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { TeamHeader } from "@/features/staff/components/TeamHeader";
 import { MainNav } from "@/components/MainNav";
 import { InstallAppButton, InstallPrompt } from "@/components/InstallPrompt";
+import { NotificationsButton } from "@/components/NotificationsButton";
 import { DEFAULT_TEAM } from "@/features/staff/receptionists";
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -40,6 +41,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
         <HotelClock locale={locale} /><LanguageSwitcher locale={locale} />
         <TeamHeader locale={locale} shift={shift} assignment={todaysAssignment} />
         <InstallAppButton />
+        <NotificationsButton locale={locale} />
         <form action={logout}><button className="icon-button" aria-label="Cerrar sesión"><LogOut size={18} /></button></form>
       </header>
       <MainNav items={nav} />
