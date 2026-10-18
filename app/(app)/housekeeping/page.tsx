@@ -7,6 +7,7 @@ import { MessageActions } from "@/features/reports/components/MessageActions";
 import { CleaningControls } from "@/features/operations/components/CleaningControls";
 import type { Locale } from "@/lib/i18n";
 import { bedSetupLabel, supportsBedSetup } from "@/features/operations/logic/room-setup";
+import { formatHousekeepingReport, formatHousekeepingReportWhatsApp } from "@/features/operations/logic/housekeeping-report";
 
 export const metadata = { title: "Housekeeping" };
 
@@ -35,11 +36,12 @@ export default async function HousekeepingPage() {
     if (key && key in groups) groups[key as keyof typeof groups].push(label);
   }
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());
-  const message = ["\u{1F9F9} HOTEL YULI", es ? "Limpieza" : "Housekeeping", dateLabel, "", `\u{1F534} ${category.priority.toUpperCase()}\n(${es ? "Salida + Entrada" : "Departure + Arrival"})\n${groups.priority.join("\n") || "—"}`, "", `\u{1F7E1} ${category.vacant_after_departure.toUpperCase()}\n${groups.vacant_after_departure.join("\n") || "—"}`, "", `\u{1F7E2} ${category.remains_occupied.toUpperCase()}\n${groups.remains_occupied.join("\n") || "—"}`].join("\n");
+  const message = formatHousekeepingReport({ es, dateLabel, groups });
+  const whatsappMessage = formatHousekeepingReportWhatsApp({ es, dateLabel, groups });
 
   return (
     <main className="dashboard-page">
-      <div className="page-heading"><div><p className="eyebrow">HOUSEKEEPING</p><h1>{es ? "Estado de habitaciones en vivo" : "Live room status"}</h1><p>{es ? "Vista operativa de las 25 unidades para hoy." : "Today’s operational view of all 25 units."}</p></div><MessageActions text={message} locale={locale} /></div>
+      <div className="page-heading"><div><p className="eyebrow">HOUSEKEEPING</p><h1>{es ? "Estado de habitaciones en vivo" : "Live room status"}</h1><p>{es ? "Vista operativa de las 25 unidades para hoy." : "Today’s operational view of all 25 units."}</p></div><MessageActions text={message} whatsappText={whatsappMessage} locale={locale} /></div>
       <section className="message-summary"><h2>{es ? "Lista para WhatsApp" : "WhatsApp summary"}</h2><pre>{message}</pre></section>
       <section className="housekeeping-grid">{(rooms ?? []).map((room) => { const op = opByRoom.get(room.id); return <article className={`housekeeping-card ${op?.same_day_arrival ? "is-priority" : ""}`} key={room.id}><div><h2>{room.display_name}</h2><span className={`status-badge status-${op?.operational_status ?? "available"}`}>{op?.operational_status === "check_in" ? "Check-in" : op?.operational_status === "staying" ? (es ? "Ocupada" : "Occupied") : (es ? "Disponible" : "Available")}</span></div><span className={`hk-category hk-${op?.housekeeping_category ?? "none"}`}>{op?.housekeeping_category ? category[op.housekeeping_category] : (es ? "Sin instrucción especial" : "No special instruction")}</span>{op?.same_day_arrival && <p>{es ? "Salida y llegada el mismo día" : "Same-day departure and arrival"}</p>}{op?.notes && <p>{op.notes}</p>}<p className="housekeeper-line">{es ? "Camarera" : "Housekeeper"}: <strong>{op?.housekeeper ? (op.housekeeper === "Other" ? (es ? "Otra" : "Other") : op.housekeeper) : (es ? "Sin asignar" : "Unassigned")}</strong></p>{op && (op.housekeeping_category || op.same_day_arrival) && (cleaningError ? <p className="panel-note">{es ? "Estado de limpieza: pendiente de activar (migración 0023)." : "Cleaning status: awaiting activation (migration 0023)."}</p> : <CleaningControls rowId={op.id} status={cleaningByRoom.get(room.id) ?? "pending"} locale={locale} />)}</article>; })}</section>
       <SaveReportButton kind="housekeeping" date={operationDate} locale={locale} text={message} />

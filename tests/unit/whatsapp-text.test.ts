@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { sanitize } from "@/features/reports/logic/whatsapp-text";
 import { formatBreakfastReport, formatBreakfastReportWhatsApp } from "@/features/operations/logic/breakfast-report";
+import { formatHousekeepingReport, formatHousekeepingReportWhatsApp } from "@/features/operations/logic/housekeeping-report";
 
 const aboveLatin1 = (text: string) => [...text].filter((ch) => ch.codePointAt(0)! > 0xff);
 
@@ -46,6 +47,46 @@ describe("Reporte de desayuno message", () => {
       "Total: 3 pax"
     ]);
     expect(aboveLatin1(text)).toEqual([]);
+  });
+});
+
+describe("Housekeeping (Limpieza) message", () => {
+  const groups = { priority: ["Habitación 3", "Habitación 10 · 3 Twin"], vacant_after_departure: ["Habitación 7"], remains_occupied: [] };
+  const en = { es: false, dateLabel: "Sunday, October 18, 2026", groups };
+
+  it("copy/print version keeps the broom and colored dots, no U+FFFD", () => {
+    const text = formatHousekeepingReport(en);
+    expect(text.split("\n")[0]).toBe("\u{1F9F9} HOTEL YULI");
+    expect(text).toContain("\u{1F534} PRIORITY\n(Departure + Arrival)");
+    expect(text).not.toContain("\uFFFD");
+  });
+
+  it("WhatsApp version: headings intact without emoji, nothing above U+00FF", () => {
+    const text = formatHousekeepingReportWhatsApp(en);
+    expect(text.split("\n")).toEqual([
+      "HOTEL YULI",
+      "Housekeeping",
+      "Sunday, October 18, 2026",
+      "",
+      "PRIORITY",
+      "(Departure + Arrival)",
+      "Habitación 3",
+      "Habitación 10 · 3 Twin",
+      "",
+      "VACANT AFTER DEPARTURE",
+      "Habitación 7",
+      "",
+      "REMAINS OCCUPIED",
+      "-"
+    ]);
+    expect(text).not.toContain("\uFFFD");
+    expect(aboveLatin1(text)).toEqual([]);
+  });
+
+  it("Spanish headings keep their accents", () => {
+    const lines = formatHousekeepingReportWhatsApp({ ...en, es: true }).split("\n");
+    expect(lines).toEqual(expect.arrayContaining(["HOTEL YULI", "Limpieza", "PRIORIDAD", "(Salida + Entrada)", "QUEDAN VACÍAS", "PERMANECEN OCUPADAS"]));
+    expect(aboveLatin1(lines.join("\n"))).toEqual([]);
   });
 });
 
