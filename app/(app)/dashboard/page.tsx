@@ -14,6 +14,7 @@ import {
 } from "@/features/operations/components/RoomBoardTable";
 import { settledTotals } from "@/features/records/logic/settlement";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
+import { operationPaxRow, totalPax } from "@/features/operations/logic/pax";
 
 export const metadata = { title: "Dashboard" };
 
@@ -32,13 +33,13 @@ export default async function DashboardPage() {
     supabase
       .from("daily_operations")
       .select(
-        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
+        "id, room_id, reservation_id, guest_name, adults, children, babies, total_pax, arrival_date, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
       )
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate),
     supabase
       .from("rooms")
-      .select("id, display_name, sort_order, active, unit_code")
+      .select("id, display_name, sort_order, active, unit_code, unit_type")
       .eq("hotel_id", hotelId)
       .order("sort_order", { ascending: true }),
     supabase.from("tasks").select("id, title, room_area, priority, status, assigned_to", { count: "exact" })
@@ -57,7 +58,8 @@ export default async function DashboardPage() {
   const rows = operations ?? [];
   const stayThrough = rows.filter((row) => row.operational_status === "staying").length;
 
-  const breakfastCovers = rows.filter((row) => row.breakfast_status === "included").reduce((sum, row) => sum + row.breakfast_pax, 0);
+  const dormRooms = new Set((rooms ?? []).filter((room) => room.unit_type === "bunk").map((room) => room.id));
+  const breakfastCovers = totalPax(rows.filter((row) => row.breakfast_status === "included").map((row) => operationPaxRow(row, dormRooms.has(row.room_id), row.breakfast_pax)));
   const pending = rows.filter((row) => (row.outstanding_balance ?? 0) > 0);
   const pendingUsd = pending.filter((row) => row.currency === "USD").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const pendingCrc = pending.filter((row) => row.currency === "CRC").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);

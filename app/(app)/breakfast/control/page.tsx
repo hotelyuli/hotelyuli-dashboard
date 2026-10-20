@@ -22,7 +22,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
 
   const [{ data: rooms }, { data: reservations }, { data: operations }] = await Promise.all([
     supabase.from("rooms").select("id, room_number, unit_type, parent_room_number, sort_order, active").eq("hotel_id", hotelId),
-    supabase.from("reservations").select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, notes").eq("hotel_id", hotelId).lt("arrival_date", day).gte("departure_date", day),
+    supabase.from("reservations").select("id, reference, room_id, guest_name, arrival_date, departure_date, adults, children, babies, notes").eq("hotel_id", hotelId).lt("arrival_date", day).gte("departure_date", day),
     supabase.from("daily_operations").select("operation_date, room_id, reservation_id, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_to_go_time, breakfast_notes").eq("hotel_id", hotelId).in("operation_date", [previousDay, day])
   ]);
 
@@ -31,7 +31,7 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
   const entries = controlEntries({
     date: day,
     units,
-    reservations: (reservations ?? []).map((r) => ({ id: r.id, roomId: r.room_id, guestName: r.guest_name, arrivalDate: r.arrival_date, departureDate: r.departure_date, adults: r.adults, children: r.children, babies: r.babies, notes: r.notes })),
+    reservations: (reservations ?? []).map((r) => ({ id: r.id, reference: r.reference, roomId: r.room_id, guestName: r.guest_name, arrivalDate: r.arrival_date, departureDate: r.departure_date, adults: r.adults, children: r.children, babies: r.babies, notes: r.notes })),
     dayRows: (operations ?? []).filter((row) => row.operation_date === day).map(toDayRow),
     previousDayRows: (operations ?? []).filter((row) => row.operation_date === previousDay).map(toDayRow)
   });

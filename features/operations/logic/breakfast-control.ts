@@ -1,6 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
 import { sanitize } from "@/features/reports/logic/whatsapp-text";
+import { totalPax, type PaxRow } from "@/features/operations/logic/pax";
 
 /**
  * "Control de desayunos": the list for breakfast on date D, sent the day before.
@@ -10,7 +11,7 @@ import { sanitize } from "@/features/reports/logic/whatsapp-text";
  */
 
 export type ControlUnit = { roomId: string; roomNumber: string; unitType: "room" | "bunk"; parentRoomNumber: string | null; sortOrder: number; active: boolean };
-export type ControlReservation = { id: string; roomId: string; guestName: string | null; arrivalDate: string; departureDate: string; adults: number; children: number; babies: number; notes: string | null };
+export type ControlReservation = { id: string; reference?: string | null; roomId: string; guestName: string | null; arrivalDate: string; departureDate: string; adults: number; children: number; babies: number; notes: string | null };
 /** A daily_operations row (D's or the previous day's). */
 export type ControlDayRow = { roomId: string; reservationId: string | null; breakfastStatus: "included" | "not_included"; breakfastPax: number; breakfastToGo: boolean; breakfastToGoTime: string | null; breakfastNotes: string | null };
 
@@ -26,6 +27,11 @@ export type ControlEntry = {
   toGo: boolean;
   toGoTime: string | null;
   notes: string | null;
+  /** The booking, so a dorm stay spread over several beds counts its pax once. */
+  reservationId?: string | null;
+  reference?: string | null;
+  arrivalDate?: string | null;
+  departureDate?: string | null;
 };
 
 const WEEKDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -97,7 +103,11 @@ export function controlEntries(params: { date: string; units: ControlUnit[]; res
       breakfastPax: breakfastIncluded ? (row ? row.breakfastPax : fromNotes.breakfast_pax) : 0,
       toGo: row?.breakfastToGo ?? false,
       toGoTime: row?.breakfastToGoTime ?? null,
-      notes: row?.breakfastNotes?.trim() || null
+      notes: row?.breakfastNotes?.trim() || null,
+      reservationId: reservation.id,
+      reference: reservation.reference ?? null,
+      arrivalDate: reservation.arrivalDate,
+      departureDate: reservation.departureDate
     }];
   });
 }
@@ -113,8 +123,12 @@ export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
 export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[] };
 export type ControlSummary = { lines: ControlLine[]; free: string[]; guests: number; includedPax: number; includedRooms: number };
 
+const guestPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds });
+const coverPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds, pax: entry.breakfastPax });
+
 export function summarizeBreakfastControl({ entries, free }: { entries: ControlEntry[]; free: string[] }): ControlSummary {
   const lines = new Map<string, ControlLine>();
+  const lineEntries = new Map<string, ControlEntry[]>();
   entries.forEach((entry, index) => {
     const key = entry.beds ? `beds:${entry.room}` : `entry:${index}`;
     const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} camas` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [] };
@@ -122,11 +136,8 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
     if (name && !line.names.includes(name)) line.names.push(name);
     if (entry.notes && !line.notes.includes(entry.notes)) line.notes.push(entry.notes);
     line.sortOrder = Math.min(line.sortOrder, entry.sortOrder);
-    line.pax += entry.pax;
-    if (entry.breakfastIncluded) {
-      line.included = true;
-      line.breakfastPax += entry.breakfastPax;
-    }
+    lineEntries.set(key, [...(lineEntries.get(key) ?? []), entry]);
+    if (entry.breakfastIncluded) line.included = true;
     if (entry.toGo) {
       line.toGo = true;
       const time = entry.toGoTime?.slice(0, 5) ?? null;
@@ -134,14 +145,19 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
     }
     lines.set(key, line);
   });
+  for (const [key, line] of lines) {
+    const listed = lineEntries.get(key) ?? [];
+    line.pax = totalPax(listed.map(guestPax));
+    line.breakfastPax = totalPax(listed.filter((entry) => entry.breakfastIncluded).map(coverPax));
+  }
 
   const sorted = [...lines.values()].sort((a, b) => a.sortOrder - b.sortOrder);
   const included = sorted.filter((line) => line.included);
   return {
     lines: sorted,
     free,
-    guests: sorted.reduce((sum, line) => sum + line.pax, 0),
-    includedPax: included.reduce((sum, line) => sum + line.breakfastPax, 0),
+    guests: totalPax(entries.map(guestPax)),
+    includedPax: totalPax(entries.filter((entry) => entry.breakfastIncluded).map(coverPax)),
     includedRooms: included.length
   };
 }
