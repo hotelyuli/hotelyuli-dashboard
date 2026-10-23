@@ -437,3 +437,37 @@ button:focus-visible,a:focus-visible{outline:3px solid #99666d;outline-offset:4p
   /* a full 20-room day (19 rooms + "20 camas") stays on one A4 page */
   .bk-table tbody td{padding-top:4px;padding-bottom:4px;height:30px}
 }
+/* Tablero de operaciones (/operations): printable sheet under the board, same look as the breakfast sheet.
+   Screen preview = Imprimir = Descargar PDF = Descargar PNG. A4 landscape via the named page "board". */
+.app-shell:has(.room-board-page) .install-banner{display:none}
+.room-board-preview-title{margin:2.5rem 0 0;font-size:1.1rem;color:var(--muted);font-weight:600}
+.room-board-payments{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer}
+.room-board-payments input{accent-color:var(--terracotta)}
+.rb-sheet{margin-top:.75rem}
+.rb-table thead th{padding:8px 8px;font-size:9.5px;letter-spacing:1.1px}
+.rb-table tbody td{padding:5px 8px;font-size:11.5px;height:30px;vertical-align:middle}
+.rb-table td.bk-room{font-size:14px;width:70px}
+.rb-table td.bk-pax{font-size:17px;width:44px}
+.rb-table tbody tr.rb-free td{color:var(--bk-muted)}
+.rb-table tbody tr.rb-free td.bk-room{color:var(--bk-wine)}
+.rb-status{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px;white-space:nowrap;text-transform:uppercase}
+.rb-status-check_in{background:#f6e3d3;color:#8a4b1f}
+.rb-status-staying{background:var(--bk-sage-bg);color:var(--bk-sage)}
+.rb-status-available{background:var(--bk-blush);color:var(--bk-muted)}
+.rb-status-out_of_service{background:#f3dede;color:#8f3b3b}
+.rb-small{display:block;font-size:9.5px;color:var(--bk-muted);margin-top:2px}
+.rb-nowrap{white-space:nowrap}
+.rb-tour{display:block;font-size:11px;font-weight:600;color:var(--bk-wine)}
+.rb-tour small{font-weight:500;color:var(--bk-muted);margin-left:4px}
+.rb-table td.rb-notes{font-size:10.5px;max-width:220px;white-space:normal}
+.rb-tot{grid-template-columns:1fr 1fr 1fr}
+.rb-tot-mid{background:var(--bk-blush);color:var(--bk-wine)}
+@media print{
+  @page board{size:A4 landscape;margin:10mm}
+  .app-shell:has(.room-board-page)>:not(.room-board-page){display:none!important}
+  .room-board-page{padding:0!important}
+  .room-board-page>:not(.rb-sheet){display:none!important}
+  body:has(.room-board-page){background:#fff}
+  .rb-sheet{page:board;margin:0}
+  .rb-table tbody td{padding-top:3px;padding-bottom:3px;height:26px}
+}

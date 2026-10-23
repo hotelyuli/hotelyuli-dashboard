@@ -1,5 +1,7 @@
 export const breakfastPdfName = (date: string) => `desayunos-${date}.pdf`;
 export const breakfastPngName = (date: string) => `desayunos-${date}.png`;
+export const boardPdfName = (date: string) => `tablero-${date}.pdf`;
+export const boardPngName = (date: string) => `tablero-${date}.png`;
 
 type ShareNavigator = { share?: (data: ShareData) => Promise<void>; canShare?: (data: ShareData) => boolean };
 

@@ -1,9 +1,10 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { dictionary, type Locale } from "@/lib/i18n";
 import { requireSession } from "@/features/auth/logic/guards";
-import { RoomBoardTable, type BoardRow, type RoomOption } from "@/features/operations/components/RoomBoardTable";
+import { RoomBoardTable, type RoomOption } from "@/features/operations/components/RoomBoardTable";
+import { RoomBoardPrintActions, RoomBoardPrintProvider, RoomBoardPrintSheet } from "@/features/operations/components/RoomBoardPrint";
+import { summarizeBoardSheet, type BoardSheetRow } from "@/features/operations/logic/board-sheet";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 
 export const metadata = { title: "Operations" };
@@ -19,13 +20,13 @@ export default async function OperationsPage() {
   const [{ data: rooms }, { data: operations }, { data: tourBookings }] = await Promise.all([
     supabase
       .from("rooms")
-      .select("id, display_name, room_number, sort_order, active, unit_code")
+      .select("id, display_name, room_number, sort_order, active, unit_code, unit_type")
       .eq("hotel_id", hotelId)
       .order("sort_order", { ascending: true }),
     supabase
       .from("daily_operations")
       .select(
-        "id, room_id, guest_name, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
+        "id, room_id, reservation_id, guest_name, arrival_date, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
       )
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate),
@@ -36,9 +37,13 @@ export default async function OperationsPage() {
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
 
   const toursForUnit = toursByUnit(tourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
-  const rows: BoardRow[] = (rooms ?? []).map((room) => {
+  const rows: BoardSheetRow[] = (rooms ?? []).map((room) => {
     const op = opsByRoom.get(room.id);
     return {
+      roomNumber: room.room_number,
+      dorm: room.unit_type === "bunk",
+      reservationId: op?.reservation_id ?? null,
+      arrivalDate: op?.arrival_date ?? null,
       tours: toursForUnit.get(room.unit_code) ?? [],
       rowId: op?.id ?? null,
       roomId: room.id,
@@ -71,16 +76,20 @@ export default async function OperationsPage() {
   });
 
   return (
-    <main className="dashboard-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">{t.operations.toUpperCase()}</p>
-          <h1>{t.operationsTitle}</h1>
-          <p>{t.operationsSubtitle}</p>
+    <main className="dashboard-page room-board-page">
+      <RoomBoardPrintProvider>
+        <div className="page-heading">
+          <div>
+            <p className="eyebrow">{t.operations.toUpperCase()}</p>
+            <h1>{t.operationsTitle}</h1>
+            <p>{t.operationsSubtitle}</p>
+          </div>
+          <RoomBoardPrintActions date={operationDate} locale={locale} />
         </div>
-        <Link className="secondary-button" href="/breakfast/control">{locale === "es" ? "Lista para restaurante" : "Restaurant list"}</Link>
-      </div>
-      <RoomBoardTable rows={rows} rooms={roomOptions} locale={locale} />
+        <RoomBoardTable rows={rows} rooms={roomOptions} locale={locale} />
+        <h2 className="room-board-preview-title">{locale === "es" ? "Vista previa para imprimir" : "Print preview"}</h2>
+        <RoomBoardPrintSheet date={operationDate} generatedAt={new Date()} summary={summarizeBoardSheet(rows)} />
+      </RoomBoardPrintProvider>
     </main>
   );
 }
