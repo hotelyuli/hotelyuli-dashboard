@@ -5,32 +5,22 @@ import { logout } from "@/features/auth/actions";
 import { requireSession } from "@/features/auth/logic/guards";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { cookies } from "next/headers";
-import { dictionary, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n";
 import { formatInTimeZone } from "date-fns-tz";
 import { TeamHeader } from "@/features/staff/components/TeamHeader";
 import { MainNav } from "@/components/MainNav";
+import { mainNavItems } from "@/components/nav-items";
 import { InstallAppButton, InstallPrompt } from "@/components/InstallPrompt";
 import { NotificationsButton } from "@/components/NotificationsButton";
 import { DEFAULT_TEAM } from "@/features/staff/receptionists";
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { supabase } = await requireSession();
+  const { supabase, user } = await requireSession();
   const cookieStore = await cookies();
   const locale = (cookieStore.get("yulios-locale")?.value ?? "es") as Locale;
   const shift = cookieStore.get("yulios-shift")?.value === "afternoon" ? "afternoon" : "morning";
-  const t = dictionary(locale);
-  const nav = [
-    { label: t.dashboard, href: "/dashboard", enabled: true },
-    { label: t.operations, href: "/operations", enabled: true },
-    { label: t.breakfast, href: "/breakfast", enabled: true },
-    { label: t.housekeeping, href: "/housekeeping", enabled: true },
-    { label: t.events, href: "/events", enabled: true },
-    { label: t.tasks, href: "/tasks", enabled: true },
-    { label: t.tours, href: "/tours", enabled: true },
-    { label: t.income, href: "/income", enabled: true },
-    { label: locale === "es" ? "Reportes" : "Reports", href: "/reports", enabled: true },
-    { label: locale === "es" ? "Proveedores" : "Contacts", href: "/contacts", enabled: true }
-  ];
+  const { data: profile } = await supabase.from("profiles").select("role, active").eq("id", user.id).single();
+  const nav = mainNavItems(locale, profile);
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const { data: assignment } = await supabase.from("daily_staff_assignments").select("morning_receptionist, afternoon_receptionist, security_guard").eq("operation_date", operationDate).maybeSingle();
   const todaysAssignment = assignment ?? DEFAULT_TEAM;
