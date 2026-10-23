@@ -16,7 +16,7 @@ export function MainNav({ items }: { items: NavItem[] }) {
       {items.map((item) => { const Icon = icons[item.href as keyof typeof icons] ?? FileText; return item.external ? (
         // Leaves YuliOS: a new tab (in the installed app, the browser), never an iframe.
         <a key={item.label} className="external" href={item.href} target="_blank" rel="noopener noreferrer">
-          <Icon size={17} aria-hidden="true" /><span>{item.label}<ExternalLink className="external-icon" size={11} aria-hidden="true" /></span>
+          <Icon size={17} aria-hidden="true" /><span className="nav-label">{item.label}<ExternalLink className="external-icon" size={12} aria-hidden="true" /></span>
         </a>
       ) : (
         <Link

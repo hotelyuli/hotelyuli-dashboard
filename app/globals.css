@@ -85,7 +85,11 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .main-nav a { display: flex; align-items: center; white-space: nowrap; font-size: .9rem; }
 .main-nav a.active { border-bottom: 2px solid var(--terracotta); font-weight: 700; }
 .main-nav a.disabled { color: #8d7f85; pointer-events: none; }
-.main-nav a.external .external-icon { margin-left: 4px; vertical-align: -1px; opacity: .7; }
+/* External items (Generador de respuestas): same box as the others; the label and the
+   tiny "opens elsewhere" icon stay on one line (Tailwind makes svg display:block). */
+.main-nav a { flex-shrink: 0; }
+.main-nav a.external .nav-label { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.main-nav a.external .external-icon { display: inline-block; flex: none; width: 12px; height: 12px; opacity: .6; }
 .dashboard-page { width: 100%; margin: 0; padding: clamp(1.25rem, 3vw, 3.25rem); }
 .page-heading { display: flex; justify-content: space-between; gap: 2rem; align-items: end; }
 .page-heading h1 { font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1; margin: .5rem 0; font-weight: 600; }
