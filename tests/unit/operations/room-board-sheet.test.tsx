@@ -5,33 +5,38 @@ import { render, screen, cleanup, within, fireEvent } from "@testing-library/rea
 import { RoomBoardSheet } from "@/features/operations/components/RoomBoardSheet";
 import { RoomBoardPrintActions, RoomBoardPrintProvider, RoomBoardPrintSheet } from "@/features/operations/components/RoomBoardPrint";
 import { summarizeBoardSheet, type BoardSheetRow } from "@/features/operations/logic/board-sheet";
+import { withCountedPax } from "@/features/operations/logic/board-rows";
 import { boardPdfName, boardPngName } from "@/features/reports/logic/share-file";
 
 const D = "2026-10-23";
 const GENERATED = new Date("2026-10-23T14:05:00Z"); // 08:05 in Costa Rica (UTC-6)
 
-const unit = (n: number): BoardSheetRow => {
+type RawRow = Omit<BoardSheetRow, "countedPax" | "countedBreakfastPax" | "paxGroup">;
+const unit = (n: number): RawRow => {
   const dorm = n > 19;
   return {
     rowId: `op${n}`, roomId: `r${n}`, roomLabel: dorm ? `Bed ${n - 19}` : `Room ${n}`, roomNumber: dorm ? "20" : String(n), dorm, unitCode: dorm ? `B${n - 19}` : String(n),
-    reservationId: null, arrivalDate: null, guestName: null, adults: 0, children: 0, babies: 0, totalPax: 0, departureDate: null,
+    reservationId: null, reference: null, arrivalDate: null, guestName: null, adults: 0, children: 0, babies: 0, totalPax: 0, departureDate: null,
     operationalStatus: "available", breakfastStatus: "not_included", breakfastPax: 0, breakfastToGo: false, breakfastNotes: null, breakfastToGoTime: null,
     paymentStatus: null, paymentMethod: null, outstandingBalance: null, currency: null, carPlate: null, bookingChannel: null, notes: null,
     housekeepingCategory: null, sameDayArrival: false, housekeeper: null, bedSetup: null, tours: []
   };
 };
-const occupied = (n: number, over: Partial<BoardSheetRow>): BoardSheetRow => ({ ...unit(n), operationalStatus: "staying", arrivalDate: "2026-10-21", departureDate: "2026-10-25", ...over });
+const occupied = (n: number, over: Partial<RawRow>): RawRow => ({ ...unit(n), operationalStatus: "staying", arrivalDate: "2026-10-21", departureDate: "2026-10-25", ...over });
 
 // 25 units: rooms 1-19 and beds B1-B6 of Room 20.
-const rows: BoardSheetRow[] = Array.from({ length: 25 }, (_, i) => unit(i + 1));
-rows[0] = occupied(1, { reservationId: "a", guestName: "Vargas, Sofía", adults: 2, totalPax: 2, breakfastStatus: "included", breakfastPax: 2, carPlate: "BCD123", bookingChannel: "Booking.com", paymentStatus: "pending", paymentMethod: "Tarjeta", outstandingBalance: 120, currency: "USD", notes: "Late check-out", tours: [{ id: "t1", tourName: "Catarata", tourDate: D, status: "paid" }] });
-rows[2] = occupied(3, { reservationId: "b", guestName: "Ana Mora", adults: 1, children: 1, totalPax: 2, operationalStatus: "check_in", arrivalDate: D });
-rows[4] = { ...unit(5), operationalStatus: "out_of_service" };
-rows[6] = { ...unit(7), housekeepingCategory: "vacant_after_departure" };
+const raw: RawRow[] = Array.from({ length: 25 }, (_, i) => unit(i + 1));
+raw[0] = occupied(1, { reservationId: "a", guestName: "Vargas, Sofía", adults: 2, totalPax: 2, breakfastStatus: "included", breakfastPax: 2, carPlate: "BCD123", bookingChannel: "Booking.com", paymentStatus: "pending", paymentMethod: "Tarjeta", outstandingBalance: 120, currency: "USD", notes: "Late check-out", tours: [{ id: "t1", tourName: "Catarata", tourDate: D, status: "paid" }] });
+raw[2] = occupied(3, { reservationId: "b", guestName: "Ana Mora", adults: 1, children: 1, totalPax: 2, operationalStatus: "check_in", arrivalDate: D });
+raw[4] = { ...unit(5), operationalStatus: "out_of_service" };
+raw[6] = { ...unit(7), housekeepingCategory: "vacant_after_departure" };
 // One dorm booking of 4 pax on beds B1-B4 (one reservation row per bed, each with the full pax)…
-for (const bed of [20, 21, 22, 23]) rows[bed - 1] = occupied(bed, { reservationId: `dorm-${bed}`, guestName: "Group, Surf", adults: 4, totalPax: 4, breakfastStatus: "included", breakfastPax: 4, outstandingBalance: 80, currency: "USD", paymentStatus: "pending" });
+for (const bed of [20, 21, 22, 23]) raw[bed - 1] = occupied(bed, { reservationId: `dorm-${bed}`, guestName: "Group, Surf", adults: 4, totalPax: 4, breakfastStatus: "included", breakfastPax: 4, outstandingBalance: 80, currency: "USD", paymentStatus: "pending" });
 // …and another guest on B5.
-rows[23] = occupied(24, { reservationId: "e", guestName: "Tom", adults: 1, totalPax: 1, breakfastStatus: "included", breakfastPax: 1, breakfastToGo: true, breakfastToGoTime: "06:30" });
+raw[23] = occupied(24, { reservationId: "e", guestName: "Tom", adults: 1, totalPax: 1, breakfastStatus: "included", breakfastPax: 1, breakfastToGo: true, breakfastToGoTime: "06:30" });
+
+// Counted the way the pages count them (shared allocatePax via withCountedPax).
+const rows: BoardSheetRow[] = withCountedPax(raw);
 
 afterEach(cleanup);
 

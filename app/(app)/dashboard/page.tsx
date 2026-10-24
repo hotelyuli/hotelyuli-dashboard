@@ -9,12 +9,12 @@ import { requireSession } from "@/features/auth/logic/guards";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   RoomBoardTable,
-  type BoardRow,
   type RoomOption
 } from "@/features/operations/components/RoomBoardTable";
 import { settledTotals } from "@/features/records/logic/settlement";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
-import { operationPaxRow, totalPax } from "@/features/operations/logic/pax";
+import { BOARD_OPERATION_COLUMNS, buildBoardRows } from "@/features/operations/logic/board-rows";
+import { reservationReferences } from "@/features/operations/services/reservation-references";
 
 export const metadata = { title: "Dashboard" };
 
@@ -32,14 +32,12 @@ export default async function DashboardPage() {
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
     supabase
       .from("daily_operations")
-      .select(
-        "id, room_id, reservation_id, guest_name, adults, children, babies, total_pax, arrival_date, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
-      )
+      .select(BOARD_OPERATION_COLUMNS)
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate),
     supabase
       .from("rooms")
-      .select("id, display_name, sort_order, active, unit_code, unit_type")
+      .select("id, display_name, room_number, sort_order, active, unit_code, unit_type")
       .eq("hotel_id", hotelId)
       .order("sort_order", { ascending: true }),
     supabase.from("tasks").select("id, title, room_area, priority, status, assigned_to", { count: "exact" })
@@ -58,48 +56,17 @@ export default async function DashboardPage() {
   const rows = operations ?? [];
   const stayThrough = rows.filter((row) => row.operational_status === "staying").length;
 
-  const dormRooms = new Set((rooms ?? []).filter((room) => room.unit_type === "bunk").map((room) => room.id));
-  const breakfastCovers = totalPax(rows.filter((row) => row.breakfast_status === "included").map((row) => operationPaxRow(row, dormRooms.has(row.room_id), row.breakfast_pax)));
   const pending = rows.filter((row) => (row.outstanding_balance ?? 0) > 0);
   const pendingUsd = pending.filter((row) => row.currency === "USD").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const pendingCrc = pending.filter((row) => row.currency === "CRC").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const opsByRoom = new Map(rows.map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
   const toursForUnit = toursByUnit(boardTourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
-  const boardRows: BoardRow[] = (rooms ?? []).map((room) => {
-    const operation = opsByRoom.get(room.id);
-    return {
-      tours: toursForUnit.get(room.unit_code) ?? [],
-      rowId: operation?.id ?? null,
-      roomId: room.id,
-      roomLabel: room.display_name,
-      guestName: operation?.guest_name ?? null,
-      adults: operation?.adults ?? 0,
-      children: operation?.children ?? 0,
-      babies: operation?.babies ?? 0,
-      totalPax: operation?.total_pax ?? 0,
-      departureDate: operation?.departure_date ?? null,
-      operationalStatus: operation?.operational_status ?? (room.active ? "available" : "out_of_service"),
-      breakfastStatus: operation?.breakfast_status ?? "not_included",
-      breakfastPax: operation?.breakfast_pax ?? 0,
-      breakfastToGo: operation?.breakfast_to_go ?? false,
-      breakfastNotes: operation?.breakfast_notes ?? null,
-      paymentStatus: operation?.payment_status ?? null,
-      paymentMethod: operation?.payment_method ?? null,
-      outstandingBalance: operation?.outstanding_balance ?? null,
-      currency: operation?.currency ?? null,
-      carPlate: operation?.car_plate ?? null,
-      bookingChannel: operation?.booking_channel ?? null,
-      notes: operation?.notes ?? null,
-      housekeepingCategory: operation?.housekeeping_category ?? null,
-      sameDayArrival: operation?.same_day_arrival ?? false,
-      unitCode: room.unit_code,
-      housekeeper: operation?.housekeeper ?? null,
-      bedSetup: operation?.bed_setup ?? null,
-      breakfastToGoTime: operation?.breakfast_to_go_time?.slice(0, 5) ?? null
-    };
-  });
+  const references = await reservationReferences(supabase, hotelId, rows.map((row) => row.reservation_id));
+  const boardRows = buildBoardRows({ rooms: rooms ?? [], operations: rows, references, toursForUnit });
 
+  // Each booking's covers once (a booking over several rooms or beds is not counted per room).
+  const breakfastCovers = boardRows.reduce((sum, row) => sum + row.countedBreakfastPax, 0);
   const available = boardRows.filter(row => row.operationalStatus === "available").length;
   const occupied = boardRows.filter(row => row.operationalStatus === "staying" || row.operationalStatus === "check_in").length;
   const capacity = boardRows.filter(row => row.operationalStatus !== "out_of_service").length;

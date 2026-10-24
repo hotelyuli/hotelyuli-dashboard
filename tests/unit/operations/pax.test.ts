@@ -35,12 +35,16 @@ describe("totalPax", () => {
     ])).toBe(3);
   });
 
-  it("(c) normal rooms are summed row by row, even with the same reference", () => {
+  it("(c) one booking over two normal rooms counts once; other rooms add up", () => {
     expect(totalPax([
       { dorm: false, pax: 2, reference: "LH-9", arrivalDate: "2026-10-18" },
       { dorm: false, pax: 2, reference: "LH-9", arrivalDate: "2026-10-18" },
       { dorm: false, pax: 3 }
-    ])).toBe(7);
+    ])).toBe(5);
+    expect(totalPax([
+      { dorm: false, pax: 2, reference: "LH-9", arrivalDate: "2026-10-18" },
+      { dorm: false, pax: 2, reference: "LH-10", arrivalDate: "2026-10-18" }
+    ])).toBe(4);
   });
 
   it("dorm rows with nothing to match on still count each", () => {
@@ -69,13 +73,13 @@ describe("breakfast control with the dorm", () => {
   });
 
   it("(c) normal rooms are unchanged", () => {
-    const summary = summarize([res({ id: "n1", roomId: "r1", adults: 2 }), res({ id: "n2", roomId: "r2", adults: 2, children: 1 }), ...dormBooking]);
+    const summary = summarize([res({ id: "n1", roomId: "r1", adults: 2 }), res({ id: "n2", roomId: "r2", guestName: "Solís, Luis", adults: 2, children: 1 }), ...dormBooking]);
     expect(summary.lines.map((line) => [line.label, line.pax])).toEqual([["1", 2], ["2", 3], ["20 camas", 4]]);
     expect(summary.guests).toBe(9);
   });
 
   it("(d) breakfast totals match the room board total for the same stays", () => {
-    const reservations = [res({ id: "n1", roomId: "r1", adults: 2, notes: "Breakfast included" }), res({ id: "n2", roomId: "r2", adults: 3 }), ...dormBooking];
+    const reservations = [res({ id: "n1", roomId: "r1", adults: 2, notes: "Breakfast included" }), res({ id: "n2", roomId: "r2", guestName: "Solís, Luis", adults: 3 }), ...dormBooking];
     const summary = summarize(reservations);
     // The board's daily_operations rows: one per unit, the dorm booking repeated on B1-B4.
     const boardRows = reservations.map((r) => ({ room_id: r.roomId, reservation_id: r.id, guest_name: r.guestName, arrival_date: r.arrivalDate, departure_date: r.departureDate, total_pax: r.adults + r.children + r.babies, breakfast_pax: r.notes ? r.adults + r.children : 0 }));

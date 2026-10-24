@@ -1,7 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
 import { sanitize } from "@/features/reports/logic/whatsapp-text";
-import { totalPax, type PaxRow } from "@/features/operations/logic/pax";
+import { allocatePax, type PaxRow } from "@/features/operations/logic/pax";
 
 /**
  * "Control de desayunos": the list for breakfast on date D, sent the day before.
@@ -120,7 +120,9 @@ export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
 }
 
 /** One room line, shared by the page card and the text. Room 20 beds are merged into "20 camas". */
-export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[] };
+export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[];
+  /** A booking over several rooms, pax not split yet: "Reserva en 14 + 18: repartir pax" / "Misma reserva que 14". */
+  stayNote: string | null };
 export type ControlSummary = { lines: ControlLine[]; free: string[]; guests: number; includedPax: number; includedRooms: number };
 
 const guestPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds });
@@ -131,7 +133,7 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
   const lineEntries = new Map<string, ControlEntry[]>();
   entries.forEach((entry, index) => {
     const key = entry.beds ? `beds:${entry.room}` : `entry:${index}`;
-    const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} camas` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [] };
+    const line = lines.get(key) ?? { room: entry.room, label: entry.beds ? `${entry.room} camas` : entry.room, beds: entry.beds, sortOrder: entry.sortOrder, names: [], pax: 0, included: false, breakfastPax: 0, toGo: false, toGoTime: null, notes: [], stayNote: null };
     const name = entry.guestName ? displayGuestName(entry.guestName) : "";
     if (name && !line.names.includes(name)) line.names.push(name);
     if (entry.notes && !line.notes.includes(entry.notes)) line.notes.push(entry.notes);
@@ -145,10 +147,28 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
     }
     lines.set(key, line);
   });
+  // Each booking once (shared allocatePax): a booking over several rooms or beds counts on its first one.
+  const ordered = entries.map((entry, index) => ({ entry, index })).sort((a, b) => a.entry.sortOrder - b.entry.sortOrder);
+  const guests = allocatePax(ordered.map(({ entry }) => guestPax(entry)));
+  const includedOrdered = ordered.filter(({ entry }) => entry.breakfastIncluded);
+  const covers = allocatePax(includedOrdered.map(({ entry }) => coverPax(entry)));
+  const coversByIndex = new Map(includedOrdered.map(({ index }, position) => [index, covers[position].pax]));
+  const counted = new Map(ordered.map(({ index }, position) => [index, { pax: guests[position].pax, covers: coversByIndex.get(index) ?? 0, group: guests[position].group, firstRoom: guests[position].group ? ordered[guests[position].group!.firstIndex].entry.room : null }]));
+  const rooms = new Map<string, string[]>();
+  ordered.forEach(({ entry }, position) => {
+    const group = guests[position].group;
+    if (!group || group.dorm) return;
+    const first = ordered[group.firstIndex].entry.room;
+    rooms.set(first, [...new Set([...(rooms.get(first) ?? []), entry.room])]);
+  });
   for (const [key, line] of lines) {
-    const listed = lineEntries.get(key) ?? [];
-    line.pax = totalPax(listed.map(guestPax));
-    line.breakfastPax = totalPax(listed.filter((entry) => entry.breakfastIncluded).map(coverPax));
+    const listed = (lineEntries.get(key) ?? []).map((entry) => counted.get(entries.indexOf(entry))!);
+    line.pax = listed.reduce((sum, row) => sum + row.pax, 0);
+    line.breakfastPax = listed.reduce((sum, row) => sum + row.covers, 0);
+    const shared = listed.find((row) => row.group && !row.group.dorm);
+    if (shared?.firstRoom) {
+      line.stayNote = shared.group!.first ? `Reserva en ${(rooms.get(shared.firstRoom) ?? []).join(" + ")}: repartir pax` : `Misma reserva que ${shared.firstRoom}`;
+    }
   }
 
   const sorted = [...lines.values()].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -156,8 +176,8 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
   return {
     lines: sorted,
     free,
-    guests: totalPax(entries.map(guestPax)),
-    includedPax: totalPax(entries.filter((entry) => entry.breakfastIncluded).map(coverPax)),
+    guests: sorted.reduce((sum, line) => sum + line.pax, 0),
+    includedPax: sorted.reduce((sum, line) => sum + line.breakfastPax, 0),
     includedRooms: included.length
   };
 }
@@ -169,6 +189,7 @@ function formatLine(line: ControlLine) {
   if (line.included) parts.push(`\u2705 DESAYUNO INCLUIDO${line.breakfastPax !== line.pax ? ` (${line.breakfastPax} pax)` : ""}`);
   if (line.toGo) parts.push(`\u{1F961} para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""}`);
   if (line.notes.length) parts.push(`\u{1F4DD} ${line.notes.join(" / ")}`);
+  if (line.stayNote) parts.push(line.stayNote);
   return parts.join(" · ");
 }
 
@@ -189,6 +210,7 @@ function formatWhatsAppLine(line: ControlLine) {
   if (line.toGo) text += ` (para llevar${line.toGoTime ? ` ${line.toGoTime}` : ""})`;
   const notes = line.notes.map(latin1Only).filter(Boolean);
   if (notes.length) text += ` · ALERGIA/NOTA: ${notes.join(" / ")}`;
+  if (line.stayNote) text += ` · ${line.stayNote}`;
   return text;
 }
 

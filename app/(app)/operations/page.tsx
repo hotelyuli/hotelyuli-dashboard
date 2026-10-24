@@ -4,7 +4,9 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { requireSession } from "@/features/auth/logic/guards";
 import { RoomBoardTable, type RoomOption } from "@/features/operations/components/RoomBoardTable";
 import { RoomBoardPrintActions, RoomBoardPrintProvider, RoomBoardPrintSheet } from "@/features/operations/components/RoomBoardPrint";
-import { summarizeBoardSheet, type BoardSheetRow } from "@/features/operations/logic/board-sheet";
+import { summarizeBoardSheet } from "@/features/operations/logic/board-sheet";
+import { BOARD_OPERATION_COLUMNS, buildBoardRows } from "@/features/operations/logic/board-rows";
+import { reservationReferences } from "@/features/operations/services/reservation-references";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 
 export const metadata = { title: "Operations" };
@@ -25,9 +27,7 @@ export default async function OperationsPage() {
       .order("sort_order", { ascending: true }),
     supabase
       .from("daily_operations")
-      .select(
-        "id, room_id, reservation_id, guest_name, arrival_date, adults, children, babies, total_pax, departure_date, operational_status, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_notes, payment_status, payment_method, outstanding_balance, currency, car_plate, booking_channel, notes, housekeeping_category, same_day_arrival, housekeeper, bed_setup, breakfast_to_go_time"
-      )
+      .select(BOARD_OPERATION_COLUMNS)
       .eq("hotel_id", hotelId)
       .eq("operation_date", operationDate),
     supabase.from("tour_bookings").select("id, room_number, guest_name, tour_name, tour_date, operation_date, status").eq("hotel_id", hotelId).neq("status", "cancelled").or(boardToursFilter(operationDate))
@@ -37,43 +37,8 @@ export default async function OperationsPage() {
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
 
   const toursForUnit = toursByUnit(tourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
-  const rows: BoardSheetRow[] = (rooms ?? []).map((room) => {
-    const op = opsByRoom.get(room.id);
-    return {
-      roomNumber: room.room_number,
-      dorm: room.unit_type === "bunk",
-      reservationId: op?.reservation_id ?? null,
-      arrivalDate: op?.arrival_date ?? null,
-      tours: toursForUnit.get(room.unit_code) ?? [],
-      rowId: op?.id ?? null,
-      roomId: room.id,
-      roomLabel: room.display_name,
-      guestName: op?.guest_name ?? null,
-      adults: op?.adults ?? 0,
-      children: op?.children ?? 0,
-      babies: op?.babies ?? 0,
-      totalPax: op?.total_pax ?? 0,
-      departureDate: op?.departure_date ?? null,
-      operationalStatus: op?.operational_status ?? (room.active ? "available" : "out_of_service"),
-      breakfastStatus: op?.breakfast_status ?? "not_included",
-      breakfastPax: op?.breakfast_pax ?? 0,
-      breakfastToGo: op?.breakfast_to_go ?? false,
-      breakfastNotes: op?.breakfast_notes ?? null,
-      paymentStatus: op?.payment_status ?? null,
-      paymentMethod: op?.payment_method ?? null,
-      outstandingBalance: op?.outstanding_balance ?? null,
-      currency: op?.currency ?? null,
-      carPlate: op?.car_plate ?? null,
-      bookingChannel: op?.booking_channel ?? null,
-      notes: op?.notes ?? null,
-      housekeepingCategory: op?.housekeeping_category ?? null,
-      sameDayArrival: op?.same_day_arrival ?? false,
-      unitCode: room.unit_code,
-      housekeeper: op?.housekeeper ?? null,
-      bedSetup: op?.bed_setup ?? null,
-      breakfastToGoTime: op?.breakfast_to_go_time?.slice(0, 5) ?? null
-    };
-  });
+  const references = await reservationReferences(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id));
+  const rows = buildBoardRows({ rooms: rooms ?? [], operations: operations ?? [], references, toursForUnit });
 
   return (
     <main className="dashboard-page room-board-page">

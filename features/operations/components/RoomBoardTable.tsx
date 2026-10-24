@@ -10,11 +10,20 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
 import { BED_SETUPS, HOUSEKEEPERS, bedSetupLabel, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 import type { BoardTour } from "@/features/operations/logic/board-tours";
+import { splitPaxWarning, type PaxGroup } from "@/features/operations/logic/pax";
 
 export type BoardRow = {
   rowId: string | null;
   roomId: string;
   roomLabel: string;
+  /** "20" for the Room 20 beds. */
+  roomNumber: string;
+  /** A Room 20 bed. */
+  dorm: boolean;
+  reservationId: string | null;
+  /** Little Hotelier Reservation Number of the reservation, if any. */
+  reference: string | null;
+  arrivalDate: string | null;
   guestName: string | null;
   adults: number;
   children: number;
@@ -42,6 +51,11 @@ export type BoardRow = {
   breakfastToGoTime: string | null;
   /** Tours linked to this room: booked today, or taking place today or later (not cancelled). */
   tours: BoardTour[];
+  /** What this row adds to the totals: a booking over several rooms/beds counts once, on its first row. */
+  countedPax: number;
+  countedBreakfastPax: number;
+  /** Set when the row's booking holds several rooms or beds. */
+  paxGroup: PaxGroup | null;
 };
 
 export type RoomOption = { id: string; displayName: string };
@@ -98,7 +112,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
               <tr key={row.roomId}>
                 <td><strong>{row.roomLabel}</strong>{row.bedSetup && <small className="housekeeping-note">{bedSetupLabel(row.bedSetup, locale)}</small>}</td>
                 <td>{row.guestName ?? "—"}</td>
-                <td>{row.totalPax || "—"}</td>
+                <td><BoardPaxCell row={row} rows={rows} locale={locale} /></td>
                 <td>
                   <span className={`status-badge status-${row.operationalStatus}`}>{statusLabel[row.operationalStatus]}</span>
                   {row.housekeepingCategory && <small className="housekeeping-note">{housekeepingLabel[row.housekeepingCategory]}</small>}
@@ -109,7 +123,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
                 <td>{row.outstandingBalance != null ? `${row.currency ?? ""} ${row.outstandingBalance.toFixed(2)}` : "—"}</td>
                 <td>
                   {row.breakfastStatus === "included" ? (
-                    <span>{t.breakfastIncluded} · {row.breakfastPax}{row.breakfastToGo ? ` (${t.toGo}${row.breakfastToGoTime ? ` ${row.breakfastToGoTime}` : ""})` : ""}</span>
+                    <span>{t.breakfastIncluded} · {row.countedBreakfastPax}{row.breakfastToGo ? ` (${t.toGo}${row.breakfastToGoTime ? ` ${row.breakfastToGoTime}` : ""})` : ""}</span>
                   ) : "—"}
                 </td>
                 <td>{row.carPlate ?? "—"}</td>
@@ -375,6 +389,24 @@ function HistoryModal({ row, t, locale, onClose }: { row: BoardRow; t: Dict; loc
         </footer>
       </section>
     </div>
+  );
+}
+
+/**
+ * Pax as counted in the totals. A booking over several rooms shows its pax on the first room and
+ * a warning on each of its rooms until the pax is split; Room 20 beds of one booking count once.
+ */
+function BoardPaxCell({ row, rows, locale }: { row: BoardRow; rows: BoardRow[]; locale: Locale }) {
+  const es = locale === "es";
+  const group = row.paxGroup;
+  const warning = splitPaxWarning(group, es);
+  const firstLabel = group ? rows[group.firstIndex]?.roomLabel : null;
+  return (
+    <>
+      {row.countedPax || "—"}
+      {group && !group.first && firstLabel && <small className="housekeeping-note">{es ? `Contado en ${firstLabel}` : `Counted in ${firstLabel}`}</small>}
+      {warning && <span className="pax-split-badge" role="note">{warning}</span>}
+    </>
   );
 }
 

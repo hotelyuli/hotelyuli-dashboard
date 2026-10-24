@@ -8,6 +8,8 @@ import { reportInput, canClose, type ReportInput } from "./logic";
 import { unitLabel, type ReportFacts } from "./template";
 import { composeShiftReport } from "./ai";
 import type { Json } from "@/lib/db/database.types";
+import { allocatePax, operationPaxRow } from "@/features/operations/logic/pax";
+import { reservationReferences } from "@/features/operations/services/reservation-references";
 
 async function context(input: ReportInput) {
   const { supabase, user } = await requireSession();
@@ -15,10 +17,10 @@ async function context(input: ReportInput) {
   if (!profile?.active || !can(profile.role as AppRole, "operations:write")) throw new Error("NOT_AUTHORIZED");
   const hotel = profile.hotel_id;
   const [rooms, events, openTasks, operations, departures, tours, breakfastReports] = await Promise.all([
-    supabase.from("rooms").select("id,unit_code").eq("hotel_id", hotel),
+    supabase.from("rooms").select("id,unit_code,unit_type").eq("hotel_id", hotel),
     supabase.from("shift_events").select("id,event_time,category,room_area,description,action_taken,status,priority").eq("hotel_id", hotel).eq("operation_date", input.date).order("event_time").order("id"),
     supabase.from("tasks").select("id,title,room_area,status,assigned_to,operation_date").eq("hotel_id", hotel).in("status", ["open", "in_progress"]).order("created_at").order("id"),
-    supabase.from("daily_operations").select("room_id,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
+    supabase.from("daily_operations").select("room_id,reservation_id,guest_name,arrival_date,departure_date,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
     supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("departure_date", input.date),
     supabase.from("tour_bookings").select("id,room_number,tour_name,tour_date,operator_name,adults,children,status").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
     supabase.from("report_snapshots").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("operation_date", input.date).eq("report_kind", "breakfast")
@@ -39,6 +41,11 @@ async function context(input: ReportInput) {
   const unit = (roomId: string) => unitLabel(unitById.get(roomId) ?? "?");
   const byUnit = <T extends { room_id: string }>(rows: T[]) => [...rows].sort((a, b) => (unitById.get(a.room_id) ?? "").localeCompare(unitById.get(b.room_id) ?? "", "en", { numeric: true }));
   const board = operations.data ?? [];
+  // To-go covers per unit, each booking once (a booking over several rooms is listed on its first room).
+  const dormRooms = new Set((rooms.data ?? []).filter((room) => room.unit_type === "bunk").map((room) => room.id));
+  const references = await reservationReferences(supabase, hotel, board.map((row) => row.reservation_id));
+  const takeaway = byUnit(board.filter((row) => row.breakfast_status === "included" && row.breakfast_to_go));
+  const takeawayPax = allocatePax(takeaway.map((row) => operationPaxRow(row, dormRooms.has(row.room_id), row.breakfast_pax, row.reservation_id ? references.get(row.reservation_id) ?? null : null)));
 
   const source: ReportFacts = {
     date: input.date,
@@ -50,7 +57,7 @@ async function context(input: ReportInput) {
     }),
     arrivals: { count: board.filter((row) => row.operational_status === "check_in").length, sameDayTurnovers: board.filter((row) => row.operational_status === "check_in" && row.same_day_arrival).length },
     departures: { count: departures.count ?? 0 },
-    takeawayBreakfasts: byUnit(board.filter((row) => row.breakfast_status === "included" && row.breakfast_to_go)).map((row) => ({ unit: unit(row.room_id), pax: row.breakfast_pax, time: row.breakfast_to_go_time })),
+    takeawayBreakfasts: takeaway.flatMap((row, index) => takeawayPax[index].group && !takeawayPax[index].group!.first ? [] : [{ unit: unit(row.room_id), pax: takeawayPax[index].pax, time: row.breakfast_to_go_time }]),
     tours: (tours.data ?? []).map((tour) => ({ room: tour.room_number, tour: tour.tour_name, tourDate: tour.tour_date, operator: tour.operator_name, pax: tour.adults + tour.children, status: tour.status })),
     openTasks: (openTasks.data ?? []).map((task) => ({ title: task.title, roomArea: task.room_area, status: task.status, assignedTo: task.assigned_to, carriedOver: task.operation_date < input.date })),
     confirmations: { breakfastSent: input.breakfastSent, arrivalsContacted: input.arrivalsContacted, takeawayReady: input.takeawayReady },

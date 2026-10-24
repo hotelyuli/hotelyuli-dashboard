@@ -1,7 +1,7 @@
 import type { BoardRow } from "@/features/operations/components/RoomBoardTable";
 import type { BoardTour } from "@/features/operations/logic/board-tours";
 import { displayGuestName } from "@/features/operations/logic/breakfast-control";
-import { groupByStay, totalPax, type PaxRow } from "@/features/operations/logic/pax";
+import { groupByStay, splitPaxWarning, type PaxRow } from "@/features/operations/logic/pax";
 
 /**
  * The printable Room board ("Tablero de operaciones"): one line per room, all 25 units,
@@ -9,8 +9,8 @@ import { groupByStay, totalPax, type PaxRow } from "@/features/operations/logic/
  * Pago/Saldo are only filled in when the sheet is printed with "Incluir pagos".
  */
 
-/** A board row plus what the sheet needs to merge Room 20's beds. */
-export type BoardSheetRow = BoardRow & { roomNumber: string; dorm: boolean; reservationId: string | null; arrivalDate: string | null };
+/** Board rows carry what the sheet needs (room number, dorm flag, booking, counted pax). */
+export type BoardSheetRow = BoardRow;
 
 export type BoardSheetLine = {
   label: string;
@@ -42,7 +42,8 @@ const PAYMENT_LABEL: Record<string, string> = { pending: "Pendiente", paid: "Pag
 const STATUS_RANK: Record<BoardRow["operationalStatus"], number> = { check_in: 3, staying: 2, available: 1, out_of_service: 0 };
 
 const unique = (values: (string | null | undefined)[]) => [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
-const paxRow = (row: BoardSheetRow, pax: number): PaxRow => ({ dorm: row.dorm, pax, reservationId: row.reservationId, guestName: row.guestName, arrivalDate: row.arrivalDate, departureDate: row.departureDate });
+const paxRow = (row: BoardSheetRow, pax: number): PaxRow => ({ dorm: row.dorm, pax, reference: row.reference, reservationId: row.reservationId, guestName: row.guestName, arrivalDate: row.arrivalDate, departureDate: row.departureDate });
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
 /** "2026-10-25" -> "25/10" */
 export const shortDate = (isoDate: string) => `${isoDate.slice(8, 10)}/${isoDate.slice(5, 7)}`;
@@ -62,11 +63,12 @@ function sheetLine(label: string, beds: boolean, rows: BoardSheetRow[]): BoardSh
     label,
     beds,
     status,
-    statusNotes: unique(rows.flatMap((row) => [row.housekeepingCategory ? HOUSEKEEPING_LABEL[row.housekeepingCategory] : null, row.sameDayArrival ? "Salida y entrada el mismo día" : null])),
+    statusNotes: unique(rows.flatMap((row) => [row.housekeepingCategory ? HOUSEKEEPING_LABEL[row.housekeepingCategory] : null, row.sameDayArrival ? "Salida y entrada el mismo día" : null, splitPaxWarning(row.paxGroup, true)])),
     names: unique(rows.map((row) => row.guestName ? displayGuestName(row.guestName) : null)),
-    pax: totalPax(rows.map((row) => paxRow(row, row.totalPax))),
+    // Counted pax (shared allocatePax): a booking over several rooms counts once, on its first room.
+    pax: sum(rows.map((row) => row.countedPax)),
     breakfastIncluded: included.length > 0,
-    breakfastPax: totalPax(included.map((row) => paxRow(row, row.breakfastPax))),
+    breakfastPax: sum(included.map((row) => row.countedBreakfastPax)),
     toGo: toGo.length > 0,
     toGoTime,
     plates: unique(rows.map((row) => row.carPlate)),
@@ -92,10 +94,10 @@ export function summarizeBoardSheet(rows: BoardSheetRow[]): BoardSheetSummary {
   const isOccupied = (line: BoardSheetLine) => line.status === "check_in" || line.status === "staying";
   return {
     lines,
-    pax: totalPax(rows.map((row) => paxRow(row, row.totalPax))),
+    pax: sum(lines.map((line) => line.pax)),
     occupied: lines.filter(isOccupied).length,
     units: rows.length,
     free: lines.filter((line) => line.status === "available").length,
-    breakfastPax: totalPax(rows.filter((row) => row.breakfastStatus === "included").map((row) => paxRow(row, row.breakfastPax)))
+    breakfastPax: sum(lines.map((line) => line.breakfastPax))
   };
 }

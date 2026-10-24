@@ -26,7 +26,7 @@ export function BreakfastControlCard({ id, date, generatedAt, summary }: { id?: 
                     {line.included && <span className="bk-pill">{"\u2615 INCLUIDO"}{line.breakfastPax !== line.pax ? ` (${line.breakfastPax})` : ""}</span>}
                     {line.toGo && <span className="bk-togo">{`\u{1F961} ${line.toGoTime ?? "para llevar"}`}</span>}
                   </td>
-                  <td className="bk-note">{line.notes.length ? `\u26A0\uFE0F ${line.notes.join(" / ")}` : null}</td>
+                  <td className="bk-note">{line.notes.length ? `\u26A0\uFE0F ${line.notes.join(" / ")}` : null}{line.stayNote && <span className="bk-stay">{line.stayNote}</span>}</td>
                   <td className="c"><span className="bk-box" /></td>
                 </tr>
               )) : <tr><td colSpan={6} className="bk-empty">Sin huéspedes para el desayuno.</td></tr>}
