@@ -56,6 +56,8 @@ export type BoardRow = {
   countedBreakfastPax: number;
   /** Set when the row's booking holds several rooms or beds. */
   paxGroup: PaxGroup | null;
+  /** The stored reservation no longer counts (retired / moved in LH): the room shows free, with this note. */
+  inactiveNote: string | null;
 };
 
 export type RoomOption = { id: string; displayName: string };
@@ -111,7 +113,7 @@ export function RoomBoardTable({ rows, rooms, locale }: { rows: BoardRow[]; room
             {rows.map((row) => (
               <tr key={row.roomId}>
                 <td><strong>{row.roomLabel}</strong>{row.bedSetup && <small className="housekeeping-note">{bedSetupLabel(row.bedSetup, locale)}</small>}</td>
-                <td>{row.guestName ?? "—"}</td>
+                <td>{row.guestName ?? "—"}{row.inactiveNote && <span className="inactive-badge" role="note">{row.inactiveNote}</span>}</td>
                 <td><BoardPaxCell row={row} rows={rows} locale={locale} /></td>
                 <td>
                   <span className={`status-badge status-${row.operationalStatus}`}>{statusLabel[row.operationalStatus]}</span>

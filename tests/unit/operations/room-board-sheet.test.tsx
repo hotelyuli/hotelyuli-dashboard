@@ -19,7 +19,7 @@ const unit = (n: number): RawRow => {
     reservationId: null, reference: null, arrivalDate: null, guestName: null, adults: 0, children: 0, babies: 0, totalPax: 0, departureDate: null,
     operationalStatus: "available", breakfastStatus: "not_included", breakfastPax: 0, breakfastToGo: false, breakfastNotes: null, breakfastToGoTime: null,
     paymentStatus: null, paymentMethod: null, outstandingBalance: null, currency: null, carPlate: null, bookingChannel: null, notes: null,
-    housekeepingCategory: null, sameDayArrival: false, housekeeper: null, bedSetup: null, tours: []
+    housekeepingCategory: null, sameDayArrival: false, housekeeper: null, bedSetup: null, tours: [], inactiveNote: null
   };
 };
 const occupied = (n: number, over: Partial<RawRow>): RawRow => ({ ...unit(n), operationalStatus: "staying", arrivalDate: "2026-10-21", departureDate: "2026-10-25", ...over });

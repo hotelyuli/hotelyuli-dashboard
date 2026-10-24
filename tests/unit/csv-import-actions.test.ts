@@ -5,7 +5,7 @@ import { materializeAfterImport } from "@/features/operations/services/materiali
 
 vi.mock("@/features/auth/logic/guards", () => ({ requireSession: vi.fn() }));
 vi.mock("@/features/operations/services/materialize-after-import", () => ({
-  materializeAfterImport: vi.fn().mockResolvedValue({ warnings: [] })
+  materializeAfterImport: vi.fn().mockResolvedValue({ warnings: [], retirement: null })
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -79,7 +79,8 @@ describe("commitCsvImport duplicate handling", () => {
       user: { id: "user-1" } as never
     });
     vi.mocked(materializeAfterImport).mockResolvedValueOnce({
-      warnings: [{ row: 0, message: "MISSING_REQUIRED_FIELDS" }, { row: 2, message: "UNRESOLVED_ROOM" }]
+      warnings: [{ row: 0, message: "MISSING_REQUIRED_FIELDS" }, { row: 2, message: "UNRESOLVED_ROOM" }],
+      retirement: null
     });
     const result = await commitCsvImport(initialState, payloadFormData());
     expect(result.status).toBe("success");

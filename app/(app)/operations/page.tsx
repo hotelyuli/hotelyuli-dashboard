@@ -7,6 +7,9 @@ import { RoomBoardPrintActions, RoomBoardPrintProvider, RoomBoardPrintSheet } fr
 import { summarizeBoardSheet } from "@/features/operations/logic/board-sheet";
 import { BOARD_OPERATION_COLUMNS, buildBoardRows } from "@/features/operations/logic/board-rows";
 import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { inactiveReservations, loadRetirementReview } from "@/features/operations/services/active-reservations";
+import { RetiredReservationsPanel } from "@/features/operations/components/RetiredReservationsPanel";
+import { addDays } from "@/features/operations/logic/breakfast-control";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 
 export const metadata = { title: "Operations" };
@@ -38,7 +41,12 @@ export default async function OperationsPage() {
 
   const toursForUnit = toursByUnit(tourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
   const references = await reservationReferences(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id));
-  const rows = buildBoardRows({ rooms: rooms ?? [], operations: operations ?? [], references, toursForUnit });
+  // Shared selector: board rows of reservations that no longer count (retired / moved in LH) show as free rooms.
+  const [inactive, review] = await Promise.all([
+    inactiveReservations(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id)),
+    loadRetirementReview(supabase, hotelId, addDays(operationDate, -1))
+  ]);
+  const rows = buildBoardRows({ rooms: rooms ?? [], operations: operations ?? [], references, toursForUnit, inactive, es: locale === "es" });
 
   return (
     <main className="dashboard-page room-board-page">
@@ -51,6 +59,7 @@ export default async function OperationsPage() {
           </div>
           <RoomBoardPrintActions date={operationDate} locale={locale} />
         </div>
+        <RetiredReservationsPanel items={review} roomLabels={Object.fromEntries((rooms ?? []).map((room) => [room.id, room.display_name]))} locale={locale} />
         <RoomBoardTable rows={rows} rooms={roomOptions} locale={locale} />
         <h2 className="room-board-preview-title">{locale === "es" ? "Vista previa para imprimir" : "Print preview"}</h2>
         <RoomBoardPrintSheet date={operationDate} generatedAt={new Date()} summary={summarizeBoardSheet(rows)} />

@@ -22,6 +22,7 @@ beforeAll(async () => {
   db = await PGlite.create({ extensions: { citext, pgcrypto } });
   await db.exec(`
     create role authenticated;
+    create role anon;
     create schema auth;
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;

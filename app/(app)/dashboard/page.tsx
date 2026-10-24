@@ -13,7 +13,8 @@ import {
 } from "@/features/operations/components/RoomBoardTable";
 import { settledTotals } from "@/features/records/logic/settlement";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
-import { BOARD_OPERATION_COLUMNS, buildBoardRows } from "@/features/operations/logic/board-rows";
+import { BOARD_OPERATION_COLUMNS, boardOccupancy, buildBoardRows, pendingBalances } from "@/features/operations/logic/board-rows";
+import { inactiveReservations, withActiveReservations } from "@/features/operations/services/active-reservations";
 import { reservationReferences } from "@/features/operations/services/reservation-references";
 
 export const metadata = { title: "Dashboard" };
@@ -28,8 +29,9 @@ export default async function DashboardPage() {
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
 
   const [{ count: checkIns }, { count: checkOuts }, { data: operations }, { data: rooms }, { data: tasks, count: taskCount, error: taskError }, { data: events, error: eventError }, { data: tours, error: tourError }, { data: income }, { data: boardTourBookings }] = await Promise.all([
-    supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate),
-    supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate),
+    // Room units (one reservation row per room / Room 20 bed) arriving / leaving today, active reservations only.
+    withActiveReservations((table) => supabase.from(table).select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("arrival_date", operationDate)),
+    withActiveReservations((table) => supabase.from(table).select("id", { count: "exact", head: true }).eq("hotel_id", hotelId).eq("departure_date", operationDate)),
     supabase
       .from("daily_operations")
       .select(BOARD_OPERATION_COLUMNS)
@@ -54,23 +56,20 @@ export default async function DashboardPage() {
   const paidTourCount = (tours ?? []).filter((tour) => tour.status === "paid").length;
   const incomeToday = settledTotals((income ?? []).map((entry) => ({ amount: entry.amount, currency: entry.currency, paid: entry.paid, entryType: entry.entry_type })));
   const rows = operations ?? [];
-  const stayThrough = rows.filter((row) => row.operational_status === "staying").length;
-
-  const pending = rows.filter((row) => (row.outstanding_balance ?? 0) > 0);
-  const pendingUsd = pending.filter((row) => row.currency === "USD").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
-  const pendingCrc = pending.filter((row) => row.currency === "CRC").reduce((sum, row) => sum + (row.outstanding_balance ?? 0), 0);
   const opsByRoom = new Map(rows.map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
   const toursForUnit = toursByUnit(boardTourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
   const references = await reservationReferences(supabase, hotelId, rows.map((row) => row.reservation_id));
-  const boardRows = buildBoardRows({ rooms: rooms ?? [], operations: rows, references, toursForUnit });
+  // Shared selector: rows of reservations that no longer count are free rooms in every KPI below.
+  const inactive = await inactiveReservations(supabase, hotelId, rows.map((row) => row.reservation_id));
+  const boardRows = buildBoardRows({ rooms: rooms ?? [], operations: rows, references, toursForUnit, inactive, es });
+  const stayThrough = boardRows.filter((row) => row.operationalStatus === "staying").length;
+  // Each booking's balance once (a booking over several rooms repeats it on every row).
+  const { USD: pendingUsd, CRC: pendingCrc, bookings: pendingBookings } = pendingBalances(boardRows);
 
   // Each booking's covers once (a booking over several rooms or beds is not counted per room).
   const breakfastCovers = boardRows.reduce((sum, row) => sum + row.countedBreakfastPax, 0);
-  const available = boardRows.filter(row => row.operationalStatus === "available").length;
-  const occupied = boardRows.filter(row => row.operationalStatus === "staying" || row.operationalStatus === "check_in").length;
-  const capacity = boardRows.filter(row => row.operationalStatus !== "out_of_service").length;
-  const occupancy = capacity ? Math.round(100 * occupied / capacity) : 0;
+  const { available, occupied, capacity, percent: occupancy } = boardOccupancy(boardRows);
   const cards = [
     { label: t.checkIns, value: checkIns ?? 0, note: es ? "llegadas de hoy" : "arrivals today", icon: CalendarCheck },
     { label: t.checkOuts, value: checkOuts ?? 0, note: es ? "salidas de hoy" : "departures today", icon: BedDouble },
@@ -78,7 +77,7 @@ export default async function DashboardPage() {
     { label: t.kpiAvailable, value: available, note: es ? "unidades libres" : "available units", icon: BedDouble },
     { label: t.breakfasts, value: breakfastCovers, note: t.includedCovers, icon: Coffee },
     // Border rule: only cards that need action today get the terracotta accent.
-    { label: t.pendingPayments, value: pending.length, note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign, attention: pending.length > 0 },
+    { label: t.pendingPayments, value: pendingBookings, note: `USD ${pendingUsd.toFixed(2)} · CRC ${pendingCrc.toFixed(2)}`, icon: CircleDollarSign, attention: pendingBookings > 0 },
     { label: t.openTasks, value: taskCount ?? 0, note: t.activeFollowups, icon: ClipboardCheck, attention: (taskCount ?? 0) > 0 },
     { label: es ? "Tours de hoy" : "Today's tours", value: tourCount, note: es ? `${paidTourCount} pagados` : `${paidTourCount} paid`, icon: Waves }
   ];

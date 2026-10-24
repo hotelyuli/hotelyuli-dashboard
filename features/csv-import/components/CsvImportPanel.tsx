@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, LogOut, CheckCircle2, FileSpreadsheet, Upload, X } from "lucide-react";
 import { commitCsvImport, type ImportState } from "@/features/csv-import/actions";
+import { RetirementNotice } from "@/features/csv-import/components/RetirementNotice";
 import { parseCsv, type ParsedCsv } from "@/features/csv-import/logic/parser";
 import { dictionary, type Locale } from "@/lib/i18n";
 
@@ -81,6 +82,7 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
               <ul>{state.rowErrors.map((rowError, index) => <li key={index}>{rowError}</li>)}</ul>
             </div>
           )}
+          {state.status === "success" && state.retirement && <RetirementNotice importId={state.retirement.importId} result={state.retirement.result} es={locale === "es"} />}
           {state.status === "error" && <p className="form-error">{t.invalidCsv}</p>}
           <footer><button type="button" className="secondary-button" disabled={pending || savedClean} onClick={() => (loaded.kind === "check_in" ? checkInRef : checkOutRef).current?.click()}>{t.replaceFile}</button><button className="primary-button" disabled={pending || savedClean}>{pending ? "…" : t.confirmImport}</button></footer>
         </form>}

@@ -133,6 +133,22 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .board-table th, .board-table td { padding: .75rem .85rem; border-bottom: 1px solid var(--line); text-align: left; }
 .board-table th { position: sticky; top: 0; background: var(--blush); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
 .board-table .notes-cell { max-width: 220px; white-space: normal; }
+/* Reservations a newer Little Hotelier file no longer lists (migration 0032): shown free, with a note. */
+.inactive-badge { display: block; margin-top: 3px; width: fit-content; padding: 2px 7px; border-radius: 10px; background: #f3dede; color: #8f3b3b; font-size: .68rem; font-weight: 600; white-space: normal; max-width: 260px; }
+.retired-review { margin-top: 1.5rem; padding: 14px 18px; border: 1px solid #f0c9c9; border-radius: 14px; background: #fff8f7; }
+.retired-review h2 { margin: 0 0 4px; font-size: 1rem; color: #8f3b3b; }
+.retired-review .form-hint { margin: 0 0 10px; font-size: .8rem; color: var(--muted); }
+.retired-review ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.retired-review li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: .85rem; }
+.retired-review li small { color: var(--muted); }
+.retired-review-actions { display: flex; gap: 6px; margin-left: auto; }
+.import-retirement { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: #fff8f7; color: #8f3b3b; font-size: .85rem; }
+.import-retirement-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.import-retirement-list label { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); }
+.import-retirement-list small { display: block; margin-left: 24px; color: var(--muted); }
+.import-retirement-list li.has-payment label, .import-retirement-list .payment-warning { color: #b42318; font-weight: 600; }
+.import-retirement-warning { margin: 0 0 6px; font-weight: 600; }
+.lh-paid-chip { display: inline-block; margin-left: 24px; padding: 1px 8px; border-radius: 10px; background: #e8eef7; color: #2f4f7a; font-size: .72rem; font-weight: 600; }
 /* A booking over several rooms whose pax is not split yet: visible on each of its rows. */
 .pax-split-badge { display: block; margin-top: 3px; padding: 2px 7px; border-radius: 10px; background: #fbeee0; color: #8a4b1f; font-size: .68rem; font-weight: 600; white-space: nowrap; width: fit-content; }
 .status-badge { display: inline-block; padding: .28rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 700; border: 1px solid var(--line); }

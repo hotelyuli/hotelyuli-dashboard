@@ -97,7 +97,8 @@ describe("/breakfast/control never writes to the database", () => {
   });
   it("the page only reads", () => {
     const source = readFileSync(path.join(root, files[0]), "utf8");
-    expect(source.match(/supabase\.from\("[a-z_]+"\)\.(\w+)/g)?.map((call) => call.split(".").pop())).toEqual(["select", "select", "select", "select"]);
+    // Reservations are read through the shared active-reservations selector: supabase.from(table).
+    expect(source.match(/supabase\.from\((?:"[a-z_]+"|table)\)\.(\w+)/g)?.map((call) => call.split(".").pop())).toEqual(["select", "select", "select", "select"]);
   });
 });
 

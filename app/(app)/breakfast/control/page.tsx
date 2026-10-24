@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
+import { withActiveReservations } from "@/features/operations/services/active-reservations";
 import { BreakfastControlActions } from "@/features/operations/components/BreakfastControlActions";
 import { selectedTourDay } from "@/features/records/logic/tour-day";
 import { addDays, controlDateLabel, controlEntries, formatBreakfastControl, formatBreakfastControlWhatsApp, freeRooms, summarizeBreakfastControl, type ControlDayRow } from "@/features/operations/logic/breakfast-control";
@@ -22,7 +23,8 @@ export default async function BreakfastControlPage({ searchParams }: { searchPar
 
   const [{ data: rooms }, { data: reservations }, { data: operations }] = await Promise.all([
     supabase.from("rooms").select("id, room_number, unit_type, parent_room_number, sort_order, active").eq("hotel_id", hotelId),
-    supabase.from("reservations").select("id, reference, room_id, guest_name, arrival_date, departure_date, adults, children, babies, notes").eq("hotel_id", hotelId).lt("arrival_date", day).gte("departure_date", day),
+    // Active reservations only (shared selector): a cancelled or moved-in-LH row never gets breakfast.
+    withActiveReservations((table) => supabase.from(table).select("id, reference, room_id, guest_name, arrival_date, departure_date, adults, children, babies, notes").eq("hotel_id", hotelId).lt("arrival_date", day).gte("departure_date", day)),
     supabase.from("daily_operations").select("operation_date, room_id, reservation_id, breakfast_status, breakfast_pax, breakfast_to_go, breakfast_to_go_time, breakfast_notes").eq("hotel_id", hotelId).in("operation_date", [previousDay, day])
   ]);
 

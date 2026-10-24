@@ -63,7 +63,7 @@ function sheetLine(label: string, beds: boolean, rows: BoardSheetRow[]): BoardSh
     label,
     beds,
     status,
-    statusNotes: unique(rows.flatMap((row) => [row.housekeepingCategory ? HOUSEKEEPING_LABEL[row.housekeepingCategory] : null, row.sameDayArrival ? "Salida y entrada el mismo día" : null, splitPaxWarning(row.paxGroup, true)])),
+    statusNotes: unique(rows.flatMap((row) => [row.housekeepingCategory ? HOUSEKEEPING_LABEL[row.housekeepingCategory] : null, row.sameDayArrival ? "Salida y entrada el mismo día" : null, splitPaxWarning(row.paxGroup, true), row.inactiveNote])),
     names: unique(rows.map((row) => row.guestName ? displayGuestName(row.guestName) : null)),
     // Counted pax (shared allocatePax): a booking over several rooms counts once, on its first room.
     pax: sum(rows.map((row) => row.countedPax)),

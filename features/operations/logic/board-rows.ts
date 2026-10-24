@@ -1,7 +1,8 @@
 import type { BoardRow } from "@/features/operations/components/RoomBoardTable";
 import type { BoardTour } from "@/features/operations/logic/board-tours";
 import type { BedSetup } from "@/features/operations/logic/room-setup";
-import { allocatePax, type PaxRow } from "@/features/operations/logic/pax";
+import { allocatePax, paxStayKey, type PaxRow } from "@/features/operations/logic/pax";
+import { clearInactiveOperations, inactiveNote, type InactiveReservation } from "@/features/operations/services/active-reservations";
 
 export type BoardRoom = { id: string; display_name: string; room_number: string; unit_code: string; unit_type: string; active: boolean };
 export type BoardOperation = {
@@ -28,12 +29,17 @@ export function buildBoardRows(params: {
   /** reservation id -> Little Hotelier Reservation Number */
   references: ReadonlyMap<string, string | null>;
   toursForUnit: ReadonlyMap<string, BoardTour[]>;
+  /** reservation id -> why it no longer counts (shared selector, migration 0032). Those rows show as free rooms. */
+  inactive?: ReadonlyMap<string, InactiveReservation>;
+  es?: boolean;
 }): BoardRow[] {
-  const opsByRoom = new Map(params.operations.map((row) => [row.room_id, row]));
+  const { operations, notes } = clearInactiveOperations(params.operations, params.inactive ?? new Map());
+  const opsByRoom = new Map(operations.map((row) => [row.room_id, row]));
   const rows = params.rooms.map((room) => {
     const op = opsByRoom.get(room.id);
     return {
       tours: params.toursForUnit.get(room.unit_code) ?? [],
+      inactiveNote: op && notes.has(op.id) ? inactiveNote(notes.get(op.id)!, params.es ?? true) : null,
       rowId: op?.id ?? null,
       roomId: room.id,
       roomLabel: room.display_name,
@@ -81,4 +87,34 @@ export function withCountedPax<T extends UncountedRow>(rows: T[]): (T & Pick<Boa
   const covers = allocatePax(included.map(({ row }) => boardPaxRow(row, row.breakfastPax)));
   const coversByIndex = new Map(included.map(({ index }, position) => [index, covers[position].pax]));
   return rows.map((row, index) => ({ ...row, countedPax: guests[index].pax, countedBreakfastPax: coversByIndex.get(index) ?? 0, paxGroup: guests[index].group }));
+}
+
+/** Occupied units (check-in or staying) over units in service; a Room 20 bed is one unit. */
+export function boardOccupancy(rows: BoardRow[]) {
+  const occupied = rows.filter((row) => row.operationalStatus === "staying" || row.operationalStatus === "check_in").length;
+  const capacity = rows.filter((row) => row.operationalStatus !== "out_of_service").length;
+  return { occupied, capacity, available: rows.filter((row) => row.operationalStatus === "available").length, percent: capacity ? Math.round((100 * occupied) / capacity) : 0 };
+}
+
+/**
+ * Outstanding balances of the day's board, per currency, each booking ONCE: a booking over several
+ * rooms or beds repeats its balance on every row (same rule as pax: same reference, else guest +
+ * dates). Rows of reservations that no longer count were already cleared by buildBoardRows.
+ */
+export function pendingBalances(rows: BoardRow[]): { USD: number; CRC: number; bookings: number } {
+  const totals = { USD: 0, CRC: 0 };
+  let bookings = 0;
+  const counted = new Set<string>();
+  for (const row of rows) {
+    const balance = row.outstandingBalance ?? 0;
+    if (balance <= 0 || !row.currency) continue;
+    const key = paxStayKey({ dorm: row.dorm, pax: 0, reference: row.reference, reservationId: row.reservationId, guestName: row.guestName, arrivalDate: row.arrivalDate, departureDate: row.departureDate });
+    if (key) {
+      if (counted.has(key)) continue;
+      counted.add(key);
+    }
+    totals[row.currency] += balance;
+    bookings += 1;
+  }
+  return { USD: Math.round(totals.USD * 100) / 100, CRC: Math.round(totals.CRC * 100) / 100, bookings };
 }

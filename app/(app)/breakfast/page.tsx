@@ -8,6 +8,7 @@ import { MessageActions } from "@/features/reports/components/MessageActions";
 import { breakfastReportTotal, formatBreakfastReport, formatBreakfastReportWhatsApp, mergeBreakfastReportRows } from "@/features/operations/logic/breakfast-report";
 import type { Locale } from "@/lib/i18n";
 import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { inactiveReservations } from "@/features/operations/services/active-reservations";
 
 export const metadata = { title: "Breakfast" };
 
@@ -22,7 +23,9 @@ export default async function BreakfastPage() {
     supabase.from("rooms").select("id, display_name, sort_order, unit_type").eq("hotel_id", hotelId).order("sort_order", { ascending: true })
   ]);
   const roomById = new Map((rooms ?? []).map((room) => [room.id, room]));
-  const rows = (operations ?? []).sort((a, b) => (roomById.get(a.room_id)?.sort_order ?? 999) - (roomById.get(b.room_id)?.sort_order ?? 999));
+  // Shared selector: breakfast rows of reservations that no longer count are left out.
+  const inactive = await inactiveReservations(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id));
+  const rows = (operations ?? []).filter((row) => !row.reservation_id || !inactive.has(row.reservation_id)).sort((a, b) => (roomById.get(a.room_id)?.sort_order ?? 999) - (roomById.get(b.room_id)?.sort_order ?? 999));
   const references = await reservationReferences(supabase, hotelId, rows.map((row) => row.reservation_id));
   const es = locale === "es";
   const dateLabel = new Intl.DateTimeFormat(es ? "es-CR" : "en-US", { timeZone: "America/Costa_Rica", weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(new Date());

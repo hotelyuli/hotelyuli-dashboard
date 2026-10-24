@@ -54,9 +54,9 @@ export type Database = {
         Relationships: [];
       };
       reservations: {
-        Row: { id: string; hotel_id: string; reference: string | null; guest_name: string | null; room_id: string; arrival_date: string; departure_date: string; adults: number; children: number; babies: number; total_amount: number | null; outstanding_balance: number | null; currency: "USD" | "CRC" | null; booking_channel: string | null; notes: string | null; source_import_id: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; hotel_id: string; reference?: string | null; guest_name?: string | null; room_id: string; arrival_date: string; departure_date: string; adults?: number; children?: number; babies?: number; total_amount?: number | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null; booking_channel?: string | null; notes?: string | null; source_import_id?: string | null; created_at?: string; updated_at?: string };
-        Update: { reference?: string | null; guest_name?: string | null; room_id?: string; arrival_date?: string; departure_date?: string; adults?: number; children?: number; babies?: number; total_amount?: number | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null; booking_channel?: string | null; notes?: string | null; updated_at?: string };
+        Row: { id: string; hotel_id: string; reference: string | null; guest_name: string | null; room_id: string; arrival_date: string; departure_date: string; adults: number; children: number; babies: number; total_amount: number | null; outstanding_balance: number | null; currency: "USD" | "CRC" | null; booking_channel: string | null; notes: string | null; source_import_id: string | null; created_at: string; updated_at: string; retired_at: string | null; retired_reason: "missing_from_import" | "cancelled" | "moved_in_lh" | "manual" | null; retired_by_import_id: string | null; retired_by: string | null; review_flag: "moved_in_lh" | null; review_flag_detail: string | null; flagged_by_import_id: string | null; reviewed_at: string | null; reviewed_by: string | null };
+        Insert: { id?: string; hotel_id: string; reference?: string | null; guest_name?: string | null; room_id: string; arrival_date: string; departure_date: string; adults?: number; children?: number; babies?: number; total_amount?: number | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null; booking_channel?: string | null; notes?: string | null; source_import_id?: string | null; created_at?: string; updated_at?: string; retired_at?: string | null; retired_reason?: "missing_from_import" | "cancelled" | "moved_in_lh" | "manual" | null; retired_by_import_id?: string | null; retired_by?: string | null; review_flag?: "moved_in_lh" | null; review_flag_detail?: string | null; flagged_by_import_id?: string | null; reviewed_at?: string | null; reviewed_by?: string | null };
+        Update: { reference?: string | null; guest_name?: string | null; room_id?: string; arrival_date?: string; departure_date?: string; adults?: number; children?: number; babies?: number; total_amount?: number | null; outstanding_balance?: number | null; currency?: "USD" | "CRC" | null; booking_channel?: string | null; notes?: string | null; updated_at?: string; retired_at?: string | null; retired_reason?: "missing_from_import" | "cancelled" | "moved_in_lh" | "manual" | null; retired_by_import_id?: string | null; retired_by?: string | null; review_flag?: "moved_in_lh" | null; review_flag_detail?: string | null; flagged_by_import_id?: string | null; reviewed_at?: string | null; reviewed_by?: string | null };
         Relationships: [];
       };
       daily_operations: {
@@ -140,10 +140,18 @@ export type Database = {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      /** Migration 0032 (retirement): reservations that count – not retired, not flagged "moved in LH". */
+      active_reservations: {
+        Row: Database["public"]["Tables"]["reservations"]["Row"];
+        Relationships: [];
+      };
+    };
     Functions: {
       current_hotel_id: { Args: Record<PropertyKey, never>; Returns: string };
       current_app_role: { Args: Record<PropertyKey, never>; Returns: Database["public"]["Enums"]["app_role"] };
+      /** Migration 0032 (retirement). */
+      retire_missing_from_import: { Args: { p_import_id: string; p_file_type: string; p_seen: Json; p_confirm?: boolean; p_only?: string[] | null }; Returns: Json };
     };
     Enums: {
       app_role: "owner" | "manager" | "reception" | "housekeeping" | "restaurant" | "maintenance" | "read_only";

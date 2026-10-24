@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { flushSheetsSoon } from "@/features/sheets/export";
 import { z } from "zod";
+import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
 import { can } from "@/features/auth/logic/permissions";
 import type { AppRole } from "@/features/auth/logic/permissions";
@@ -11,6 +12,7 @@ import { materializeUnit, type ReservationForBoard } from "@/features/operations
 import { BED_SETUPS, HOUSEKEEPERS, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 import { applySettlement, supabaseLedger } from "@/features/records/services/settlement";
 import { runAction, type ActionResult } from "@/lib/action-result";
+import { withActiveReservations } from "@/features/operations/services/active-reservations";
 import { CLEANING_ACTIONS } from "@/features/operations/logic/cleaning";
 
 async function authorizeOperationsWrite() {
@@ -212,6 +214,38 @@ export async function swapRooms(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+const reviewSchema = z.object({ reservationId: z.string().uuid(), decision: z.enum(["confirm", "restore"]) });
+
+/**
+ * Review panel for reservations an import retired or flagged (migration 0032).
+ * confirm: it really is gone from that room – stays retired (a "moved in LH" row is retired as moved).
+ * restore: it does count – active again, and the import never retires it again; its room's board
+ * row for today is rebuilt from the reservations that count.
+ */
+export async function reviewRetiredReservation(formData: FormData): Promise<ActionResult> {
+  return runAction("reviewRetiredReservation", async () => {
+    const { supabase, user, hotelId } = await authorizeOperationsWrite();
+    const parsed = reviewSchema.safeParse(Object.fromEntries(formData.entries()));
+    if (!parsed.success) throw new Error("INVALID_INPUT");
+    const { reservationId, decision } = parsed.data;
+    const { data: reservation, error: loadError } = await supabase.from("reservations").select("id, room_id, review_flag, retired_at").eq("id", reservationId).eq("hotel_id", hotelId).single();
+    if (loadError || !reservation) throw new Error(`RESERVATION_NOT_FOUND: ${loadError?.message ?? reservationId}`);
+    const now = new Date().toISOString();
+    const review = { reviewed_at: now, reviewed_by: user.id, updated_at: now };
+    const change = decision === "restore"
+      ? { ...review, retired_at: null, retired_reason: null, retired_by_import_id: null, retired_by: null, review_flag: null, review_flag_detail: null, flagged_by_import_id: null }
+      : reservation.review_flag === "moved_in_lh"
+        ? { ...review, retired_at: now, retired_reason: "moved_in_lh" as const, retired_by: user.id, review_flag: null }
+        : review;
+    const { error } = await supabase.from("reservations").update(change).eq("id", reservationId).eq("hotel_id", hotelId);
+    if (error) throw new Error(`SAVE_FAILED: ${error.message}`);
+    const today = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
+    await recomputeRooms({ supabase, hotelId, operationDate: today, roomIds: [reservation.room_id] });
+    revalidatePath("/operations");
+    revalidatePath("/dashboard");
+  });
+}
+
 export async function getRowHistory(rowId: string) {
   const { supabase, hotelId } = await authorizeOperationsWrite();
   const { data } = await supabase
@@ -233,13 +267,14 @@ async function recomputeRooms(params: {
 }) {
   const { supabase, hotelId, operationDate, roomIds } = params;
 
-  const { data: reservations } = await supabase
-    .from("reservations")
+  // Only reservations that count (shared selector): a retired / moved-in-LH row never re-occupies a room.
+  const { data: reservations } = await withActiveReservations((table) => supabase
+    .from(table)
     .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, booking_channel")
     .eq("hotel_id", hotelId)
     .in("room_id", roomIds)
     .lte("arrival_date", operationDate)
-    .gte("departure_date", operationDate);
+    .gte("departure_date", operationDate));
 
   const byRoom = new Map<string, ReservationForBoard[]>();
   for (const reservation of reservations ?? []) {

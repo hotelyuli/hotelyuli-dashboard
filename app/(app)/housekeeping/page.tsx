@@ -3,6 +3,7 @@ import { ReportHistory } from "@/features/reports/components/ReportHistory";
 import { cookies } from "next/headers";
 import { formatInTimeZone } from "date-fns-tz";
 import { requireSession } from "@/features/auth/logic/guards";
+import { inactiveReservations } from "@/features/operations/services/active-reservations";
 import { MessageActions } from "@/features/reports/components/MessageActions";
 import { CleaningControls } from "@/features/operations/components/CleaningControls";
 import type { Locale } from "@/lib/i18n";
@@ -19,9 +20,11 @@ export default async function HousekeepingPage() {
   const operationDate = formatInTimeZone(new Date(), "America/Costa_Rica", "yyyy-MM-dd");
   const [{ data: rooms }, { data: operations }] = await Promise.all([
     supabase.from("rooms").select("id, display_name, sort_order, unit_code").eq("hotel_id", hotelId).eq("active", true).order("sort_order", { ascending: true }),
-    supabase.from("daily_operations").select("id, room_id, operational_status, housekeeping_category, same_day_arrival, notes, bed_setup, housekeeper").eq("hotel_id", hotelId).eq("operation_date", operationDate)
+    supabase.from("daily_operations").select("id, room_id, reservation_id, operational_status, housekeeping_category, same_day_arrival, notes, bed_setup, housekeeper").eq("hotel_id", hotelId).eq("operation_date", operationDate)
   ]);
-  const opByRoom = new Map((operations ?? []).map((row) => [row.room_id, row]));
+  // Shared selector: a row whose reservation no longer counts (retired / moved in LH) is not a room to prepare.
+  const inactive = await inactiveReservations(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id));
+  const opByRoom = new Map((operations ?? []).filter((row) => !row.reservation_id || !inactive.has(row.reservation_id)).map((row) => [row.room_id, row]));
   const { data: cleaningRows, error: cleaningError } = await supabase.from("daily_operations").select("room_id, cleaning_status").eq("hotel_id", hotelId).eq("operation_date", operationDate);
   const cleaningByRoom = new Map((cleaningRows ?? []).map((row) => [row.room_id, row.cleaning_status]));
   const es = locale === "es";

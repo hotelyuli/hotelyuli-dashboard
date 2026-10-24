@@ -10,6 +10,7 @@ import { composeShiftReport } from "./ai";
 import type { Json } from "@/lib/db/database.types";
 import { allocatePax, operationPaxRow } from "@/features/operations/logic/pax";
 import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { inactiveReservations, withActiveReservations } from "@/features/operations/services/active-reservations";
 
 async function context(input: ReportInput) {
   const { supabase, user } = await requireSession();
@@ -21,7 +22,7 @@ async function context(input: ReportInput) {
     supabase.from("shift_events").select("id,event_time,category,room_area,description,action_taken,status,priority").eq("hotel_id", hotel).eq("operation_date", input.date).order("event_time").order("id"),
     supabase.from("tasks").select("id,title,room_area,status,assigned_to,operation_date").eq("hotel_id", hotel).in("status", ["open", "in_progress"]).order("created_at").order("id"),
     supabase.from("daily_operations").select("room_id,reservation_id,guest_name,arrival_date,departure_date,operational_status,same_day_arrival,breakfast_status,breakfast_pax,breakfast_to_go,breakfast_to_go_time").eq("hotel_id", hotel).eq("operation_date", input.date),
-    supabase.from("reservations").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("departure_date", input.date),
+    withActiveReservations((table) => supabase.from(table).select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("departure_date", input.date)),
     supabase.from("tour_bookings").select("id,room_number,tour_name,tour_date,operator_name,adults,children,status").eq("hotel_id", hotel).eq("operation_date", input.date).order("created_at").order("id"),
     supabase.from("report_snapshots").select("id", { count: "exact", head: true }).eq("hotel_id", hotel).eq("operation_date", input.date).eq("report_kind", "breakfast")
   ]);
@@ -40,7 +41,9 @@ async function context(input: ReportInput) {
   const unitById = new Map((rooms.data ?? []).map((room) => [room.id, room.unit_code]));
   const unit = (roomId: string) => unitLabel(unitById.get(roomId) ?? "?");
   const byUnit = <T extends { room_id: string }>(rows: T[]) => [...rows].sort((a, b) => (unitById.get(a.room_id) ?? "").localeCompare(unitById.get(b.room_id) ?? "", "en", { numeric: true }));
-  const board = operations.data ?? [];
+  // Shared selector: rows of reservations that no longer count are left out of the report.
+  const inactive = await inactiveReservations(supabase, hotel, (operations.data ?? []).map((row) => row.reservation_id));
+  const board = (operations.data ?? []).filter((row) => !row.reservation_id || !inactive.has(row.reservation_id));
   // To-go covers per unit, each booking once (a booking over several rooms is listed on its first room).
   const dormRooms = new Set((rooms.data ?? []).filter((room) => room.unit_type === "bunk").map((room) => room.id));
   const references = await reservationReferences(supabase, hotel, board.map((row) => row.reservation_id));
