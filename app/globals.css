@@ -148,6 +148,7 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .import-retirement-list small { display: block; margin-left: 24px; color: var(--muted); }
 .import-retirement-list li.has-payment label, .import-retirement-list .payment-warning { color: #b42318; font-weight: 600; }
 .import-retirement-warning { margin: 0 0 6px; font-weight: 600; }
+.import-retirement-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .lh-paid-chip { display: inline-block; margin-left: 24px; padding: 1px 8px; border-radius: 10px; background: #e8eef7; color: #2f4f7a; font-size: .72rem; font-weight: 600; }
 /* A booking over several rooms whose pax is not split yet: visible on each of its rows. */
 .pax-split-badge { display: block; margin-top: 3px; padding: 2px 7px; border-radius: 10px; background: #fbeee0; color: #8a4b1f; font-size: .68rem; font-weight: 600; white-space: nowrap; width: fit-content; }

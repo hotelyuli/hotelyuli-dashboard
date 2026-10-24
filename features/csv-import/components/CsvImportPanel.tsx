@@ -28,12 +28,18 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
   const state = actionState === dismissed ? initialState : actionState;
   // A clean save (no row errors) locks the buttons and auto-closes; errors keep the modal open as before.
   const savedClean = state.status === "success" && !state.rowErrors?.length;
+  // A retirement result (list to tick, or warnings) holds the dialog open – no auto-close, no refresh,
+  // no backdrop close – until the person confirms (then it closes like a clean save) or closes it.
+  // Kept here, in the import bar's client state, which a server revalidation doesn't re-mount.
+  const [retirementConfirmed, setRetirementConfirmed] = useState(false);
+  const holdOpen = state.status === "success" && Boolean(state.retirement) && !retirementConfirmed;
 
   function close() {
     setOpen(false);
     setLoaded(null);
     setError("");
     setDismissed(actionState);
+    setRetirementConfirmed(false);
     if (checkInRef.current) checkInRef.current.value = "";
     if (checkOutRef.current) checkOutRef.current.value = "";
     router.refresh();
@@ -42,10 +48,10 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
   useEffect(() => { closeRef.current = close; });
 
   useEffect(() => {
-    if (!savedClean) return;
+    if (!savedClean || holdOpen) return;
     const timer = window.setTimeout(() => closeRef.current(), AUTO_CLOSE_MS);
     return () => window.clearTimeout(timer);
-  }, [savedClean, actionState]);
+  }, [savedClean, holdOpen, actionState]);
 
   async function loadFile(kind: ImportKind, file?: File) {
     if (!file) return;
@@ -66,7 +72,7 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
       <input ref={checkInRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_in", event.target.files?.[0])} />
       <input ref={checkOutRef} hidden type="file" accept=".csv,text/csv" onChange={(event) => loadFile("check_out", event.target.files?.[0])} />
     </div>
-    {open && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+    {open && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !holdOpen && close()}>
       <section className="csv-modal" role="dialog" aria-modal="true" aria-labelledby="csv-title">
         <header><div><p className="eyebrow">LITTLE HOTELIER</p><h2 id="csv-title">{t.csvImportTitle}</h2></div><button onClick={close} aria-label={t.cancel}><X /></button></header>
         {error && <p className="form-error">{error}</p>}
@@ -82,7 +88,7 @@ export function CsvImportPanel({ locale, variant = "compact" }: { locale: Locale
               <ul>{state.rowErrors.map((rowError, index) => <li key={index}>{rowError}</li>)}</ul>
             </div>
           )}
-          {state.status === "success" && state.retirement && <RetirementNotice importId={state.retirement.importId} result={state.retirement.result} es={locale === "es"} />}
+          {state.status === "success" && state.retirement && <RetirementNotice importId={state.retirement.importId} result={state.retirement.result} es={locale === "es"} onConfirmed={() => setRetirementConfirmed(true)} onDismiss={close} />}
           {state.status === "error" && <p className="form-error">{t.invalidCsv}</p>}
           <footer><button type="button" className="secondary-button" disabled={pending || savedClean} onClick={() => (loaded.kind === "check_in" ? checkInRef : checkOutRef).current?.click()}>{t.replaceFile}</button><button className="primary-button" disabled={pending || savedClean}>{pending ? "…" : t.confirmImport}</button></footer>
         </form>}

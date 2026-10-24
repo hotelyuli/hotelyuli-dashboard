@@ -20,7 +20,8 @@ export const TICK_ORDINARY_CANDIDATES_BY_DEFAULT = false;
  * with money recorded in YuliOS is red; a row from a check-out file says the stay may have been
  * extended in Little Hotelier; "Pagado (LH)" (paid per LH's balance only) is information only.
  */
-export function RetirementNotice({ importId, result, es }: { importId: string; result: RetirementResult; es: boolean }) {
+/** `onConfirmed`: the ticked rows were retired / flagged. `onDismiss`: close the dialog without confirming. */
+export function RetirementNotice({ importId, result, es, onConfirmed, onDismiss }: { importId: string; result: RetirementResult; es: boolean; onConfirmed?: () => void; onDismiss?: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [ticked, setTicked] = useState<Set<string>>(() => new Set(TICK_ORDINARY_CANDIDATES_BY_DEFAULT ? result.candidates.filter((c) => !c.has_payment && !c.may_be_extended).map((c) => c.reservation_id) : []));
@@ -49,6 +50,7 @@ export function RetirementNotice({ importId, result, es }: { importId: string; r
       if (!outcome.ok) { setError(outcome.error); return; }
       setApplied(ids.length);
       router.refresh();
+      onConfirmed?.();
     });
   }
 
@@ -73,7 +75,10 @@ export function RetirementNotice({ importId, result, es }: { importId: string; r
               </li>
             ))}
           </ul>
-          <button type="button" className="primary-button" onClick={confirm} disabled={pending || ticked.size === 0}>{pending ? "…" : es ? `Confirmar (${ticked.size} seleccionadas)` : `Confirm (${ticked.size} selected)`}</button>
+          <div className="import-retirement-actions">
+            {onDismiss && <button type="button" className="secondary-button" onClick={onDismiss} disabled={pending}>{es ? "Cerrar sin confirmar" : "Close without confirming"}</button>}
+            <button type="button" className="primary-button" onClick={confirm} disabled={pending || ticked.size === 0}>{pending ? "…" : es ? `Confirmar (${ticked.size} seleccionadas)` : `Confirm (${ticked.size} selected)`}</button>
+          </div>
         </>
       ))}
       {error && <p className="form-error">{error}</p>}
