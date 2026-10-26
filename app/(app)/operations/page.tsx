@@ -6,7 +6,7 @@ import { RoomBoardTable, type RoomOption } from "@/features/operations/component
 import { RoomBoardPrintActions, RoomBoardPrintProvider, RoomBoardPrintSheet } from "@/features/operations/components/RoomBoardPrint";
 import { summarizeBoardSheet } from "@/features/operations/logic/board-sheet";
 import { BOARD_OPERATION_COLUMNS, buildBoardRows } from "@/features/operations/logic/board-rows";
-import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { reservationReferences, reservationSplitsFor } from "@/features/operations/services/reservation-references";
 import { inactiveReservations, loadRetirementReview } from "@/features/operations/services/active-reservations";
 import { RetiredReservationsPanel } from "@/features/operations/components/RetiredReservationsPanel";
 import { addDays } from "@/features/operations/logic/breakfast-control";
@@ -40,13 +40,16 @@ export default async function OperationsPage() {
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
 
   const toursForUnit = toursByUnit(tourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
-  const references = await reservationReferences(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id));
+  const [references, splits] = await Promise.all([
+    reservationReferences(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id)),
+    reservationSplitsFor(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id))
+  ]);
   // Shared selector: board rows of reservations that no longer count (retired / moved in LH) show as free rooms.
   const [inactive, review] = await Promise.all([
     inactiveReservations(supabase, hotelId, (operations ?? []).map((row) => row.reservation_id)),
     loadRetirementReview(supabase, hotelId, addDays(operationDate, -1))
   ]);
-  const rows = buildBoardRows({ rooms: rooms ?? [], operations: operations ?? [], references, toursForUnit, inactive, es: locale === "es" });
+  const rows = buildBoardRows({ rooms: rooms ?? [], operations: operations ?? [], references, toursForUnit, inactive, splits, es: locale === "es" });
 
   return (
     <main className="dashboard-page room-board-page">

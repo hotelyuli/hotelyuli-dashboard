@@ -1,7 +1,7 @@
 import type { BoardRow } from "@/features/operations/components/RoomBoardTable";
 import type { BoardTour } from "@/features/operations/logic/board-tours";
 import type { BedSetup } from "@/features/operations/logic/room-setup";
-import { allocatePax, paxStayKey, type PaxRow } from "@/features/operations/logic/pax";
+import { allocatePax, paxStayKey, splitPaxFields, type PaxRow, type ReservationSplit } from "@/features/operations/logic/pax";
 import { clearInactiveOperations, inactiveNote, type InactiveReservation } from "@/features/operations/services/active-reservations";
 
 export type BoardRoom = { id: string; display_name: string; room_number: string; unit_code: string; unit_type: string; active: boolean };
@@ -31,6 +31,8 @@ export function buildBoardRows(params: {
   toursForUnit: ReadonlyMap<string, BoardTour[]>;
   /** reservation id -> why it no longer counts (shared selector, migration 0032). Those rows show as free rooms. */
   inactive?: ReadonlyMap<string, InactiveReservation>;
+  /** reservation id -> its per-room split (migration 0033): a split booking counts each room's own pax. */
+  splits?: ReadonlyMap<string, ReservationSplit>;
   es?: boolean;
 }): BoardRow[] {
   const { operations, notes } = clearInactiveOperations(params.operations, params.inactive ?? new Map());
@@ -47,6 +49,7 @@ export function buildBoardRows(params: {
       dorm: room.unit_type === "bunk",
       reservationId: op?.reservation_id ?? null,
       reference: op?.reservation_id ? params.references.get(op.reservation_id) ?? null : null,
+      paxSplit: op?.reservation_id ? params.splits?.get(op.reservation_id) ?? null : null,
       arrivalDate: op?.arrival_date ?? null,
       guestName: op?.guest_name ?? null,
       adults: op?.adults ?? 0,
@@ -78,13 +81,13 @@ export function buildBoardRows(params: {
 }
 
 type UncountedRow = Omit<BoardRow, "countedPax" | "countedBreakfastPax" | "paxGroup">;
-const boardPaxRow = (row: UncountedRow, pax: number): PaxRow => ({ dorm: row.dorm, pax, reference: row.reference, reservationId: row.reservationId, guestName: row.guestName, arrivalDate: row.arrivalDate, departureDate: row.departureDate });
+const boardPaxRow = (row: UncountedRow, pax: number, covers = false): PaxRow => ({ dorm: row.dorm, pax, reference: row.reference, reservationId: row.reservationId, guestName: row.guestName, arrivalDate: row.arrivalDate, departureDate: row.departureDate, ...splitPaxFields(row.paxSplit ?? undefined, covers) });
 
 /** Adds the counted pax and breakfast covers (each booking once) to rows given in board order. */
 export function withCountedPax<T extends UncountedRow>(rows: T[]): (T & Pick<BoardRow, "countedPax" | "countedBreakfastPax" | "paxGroup">)[] {
   const guests = allocatePax(rows.map((row) => boardPaxRow(row, row.totalPax)));
   const included = rows.map((row, index) => ({ row, index })).filter(({ row }) => row.breakfastStatus === "included");
-  const covers = allocatePax(included.map(({ row }) => boardPaxRow(row, row.breakfastPax)));
+  const covers = allocatePax(included.map(({ row }) => boardPaxRow(row, row.breakfastPax, true)));
   const coversByIndex = new Map(included.map(({ index }, position) => [index, covers[position].pax]));
   return rows.map((row, index) => ({ ...row, countedPax: guests[index].pax, countedBreakfastPax: coversByIndex.get(index) ?? 0, paxGroup: guests[index].group }));
 }

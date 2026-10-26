@@ -84,6 +84,7 @@ describe("/breakfast/control never writes to the database", () => {
   const root = path.resolve(__dirname, "../../..");
   const files = [
     "app/(app)/breakfast/control/page.tsx",
+    "features/operations/services/breakfast-control-data.ts",
     "features/operations/components/BreakfastControlActions.tsx",
     "features/operations/components/BreakfastControlCard.tsx",
     "features/operations/logic/breakfast-control.ts",
@@ -95,10 +96,10 @@ describe("/breakfast/control never writes to the database", () => {
     // Table writes only; a Set's .delete() in the pure logic is not a database call.
     expect(source).not.toMatch(/\.(insert|update|upsert)\(|\.from\([^)]*\)\s*\.delete\(|\.rpc\(|["']use server["']|SaveReportButton|\/actions["']|Guardar/);
   });
-  it("the page only reads", () => {
-    const source = readFileSync(path.join(root, files[0]), "utf8");
+  it("the page only reads (its queries live in breakfast-control-data.ts)", () => {
+    const source = readFileSync(path.join(root, files[1]), "utf8");
     // Reservations are read through the shared active-reservations selector: supabase.from(table).
-    expect(source.match(/supabase\.from\((?:"[a-z_]+"|table)\)\.(\w+)/g)?.map((call) => call.split(".").pop())).toEqual(["select", "select", "select", "select"]);
+    expect(source.match(/supabase\.from\((?:"[a-z_]+"|table)\)\.(\w+)/g)?.map((call) => call.split(".").pop())).toEqual(["select", "select", "select"]);
   });
 });
 

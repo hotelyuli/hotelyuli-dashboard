@@ -14,6 +14,10 @@ import { applySettlement, supabaseLedger } from "@/features/records/services/set
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { withActiveReservations } from "@/features/operations/services/active-reservations";
 import { CLEANING_ACTIONS } from "@/features/operations/logic/cleaning";
+import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
+import { reservationSplits, type Pax3, type SplitState } from "@/features/operations/logic/pax";
+import { splitSources } from "@/features/operations/services/reservation-references";
+import { isMissingSchema } from "@/lib/db/schema-errors";
 
 async function authorizeOperationsWrite() {
   const { supabase, user } = await requireSession();
@@ -322,4 +326,75 @@ async function recomputeRooms(params: {
       { onConflict: "hotel_id,operation_date,room_id" }
     );
   }
+}
+
+/* ---------- "Repartir pax": per-room split of a booking over several rooms (migration 0033) ---------- */
+
+export type SplitDialogData = {
+  reference: string; arrivalDate: string; guest: string | null; state: SplitState;
+  booking: Pax3; breakfast: boolean;
+  rooms: { roomId: string; label: string; current: Pax3 | null }[];
+};
+
+/** The booking of `reservationId` with all its active rooms, for the split dialog. */
+export async function loadReservationSplit(reservationId: string): Promise<{ ok: true; data: SplitDialogData } | { ok: false; error: string }> {
+  try {
+    const { supabase, hotelId } = await authorizeOperationsWrite();
+    const id = z.string().uuid().parse(reservationId);
+    const { data: own, error: ownError } = await supabase.from("reservations").select("reference, arrival_date").eq("id", id).eq("hotel_id", hotelId).single();
+    if (ownError || !own) throw new Error(`RESERVATION_NOT_FOUND: ${ownError?.message ?? id}`);
+    if (!own.reference?.trim()) throw new Error("NO_REFERENCE");
+    const { data, error } = await withActiveReservations((table) => supabase.from(table)
+      .select("id, reference, room_id, guest_name, arrival_date, adults, children, babies, notes, split_adults, split_children, split_babies, split_breakfast")
+      .eq("hotel_id", hotelId).eq("reference", own.reference!).eq("arrival_date", own.arrival_date));
+    if (isMissingSchema(error)) throw new Error("MIGRATION_0033_MISSING");
+    if (error) throw new Error(`RESERVATIONS_LOAD_FAILED: ${error.message}`);
+    const rows = data ?? [];
+    if (rows.length < 2) throw new Error("NOT_MULTI_ROOM");
+    const [{ data: rooms }, { data: board }] = await Promise.all([
+      supabase.from("rooms").select("id, display_name, sort_order").eq("hotel_id", hotelId).in("id", rows.map((row) => row.room_id)),
+      supabase.from("daily_operations").select("breakfast_status").eq("hotel_id", hotelId).in("reservation_id", rows.map((row) => row.id)).eq("breakfast_status", "included")
+    ]);
+    const roomById = new Map((rooms ?? []).map((room) => [room.id, room]));
+    const splits = reservationSplits(splitSources(rows));
+    const first = splits.get(rows[0].id)!;
+    const sorted = [...rows].sort((a, b) => (roomById.get(a.room_id)?.sort_order ?? 0) - (roomById.get(b.room_id)?.sort_order ?? 0));
+    // Breakfast for the booking: the one chosen in this dialog before, else any board row with it, else the LH notes.
+    const breakfast = rows.find((row) => row.split_breakfast != null)?.split_breakfast
+      ?? ((board ?? []).length > 0 || rows.some((row) => breakfastFromNotes(row.notes, row.adults, row.children).breakfast_status === "included"));
+    return { ok: true, data: {
+      reference: own.reference, arrivalDate: own.arrival_date, guest: rows[0].guest_name, state: first.state, booking: first.booking, breakfast,
+      rooms: sorted.map((row) => ({
+        roomId: row.room_id,
+        label: roomById.get(row.room_id)?.display_name ?? row.room_id,
+        current: row.split_adults != null && row.split_children != null && row.split_babies != null ? { adults: row.split_adults, children: row.split_children, babies: row.split_babies } : null
+      }))
+    } };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+const count = z.coerce.number().int().min(0).max(99);
+const splitSchema = z.object({
+  reference: z.string().trim().min(1).max(80),
+  arrivalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  breakfast: z.boolean(),
+  rooms: z.array(z.object({ roomId: z.string().uuid(), adults: count, children: count, babies: count })).min(2).max(40)
+});
+
+/** Saves the whole split in one transaction (set_reservation_split): board rows and breakfast covers follow it. */
+export async function saveReservationSplit(input: z.input<typeof splitSchema>): Promise<ActionResult> {
+  return runAction("saveReservationSplit", async () => {
+    const { supabase } = await authorizeOperationsWrite();
+    const parsed = splitSchema.safeParse(input);
+    if (!parsed.success) throw new Error("INVALID_INPUT");
+    const { reference, arrivalDate, breakfast, rooms } = parsed.data;
+    const { error } = await supabase.rpc("set_reservation_split", {
+      p_reference: reference, p_arrival: arrivalDate, p_breakfast: breakfast,
+      p_split: rooms.map((room) => ({ room_id: room.roomId, adults: room.adults, children: room.children, babies: room.babies }))
+    });
+    if (error) throw new Error(error.message);
+    for (const path of ["/operations", "/dashboard", "/breakfast", "/breakfast/control", "/housekeeping"]) revalidatePath(path);
+  });
 }

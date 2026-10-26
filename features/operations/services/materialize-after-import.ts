@@ -5,6 +5,8 @@ import { planMaterialization } from "@/features/operations/logic/materialize-pla
 import { normalizeReservationRow } from "@/features/operations/logic/reservation-normalizer";
 
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
+import { coverPax, reservationSplits } from "@/features/operations/logic/pax";
+import { splitSources } from "@/features/operations/services/reservation-references";
 import { seenFromImport } from "@/features/csv-import/logic/import-seen";
 import { inactiveReservations, withActiveReservations } from "@/features/operations/services/active-reservations";
 import { retireMissingFromImport, type RetirementResult } from "@/features/operations/services/retirement";
@@ -101,26 +103,44 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
   if (!units.length) return;
 
   // Only reservations that count: a retired or moved-in-LH row never occupies a room on the board.
-  const { data: reservations } = await withActiveReservations((table) => supabase
+  // With migration 0033, a booking over several rooms whose pax were split puts each room's own pax
+  // on the board (and its breakfast covers); before 0033 the split columns don't exist yet.
+  const columns = "id, reference, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, notes, booking_channel";
+  const load = (select: string) => withActiveReservations((table) => supabase
     .from(table)
-    .select("id, room_id, guest_name, arrival_date, departure_date, adults, children, babies, outstanding_balance, currency, notes, booking_channel")
+    .select(select)
     .eq("hotel_id", hotelId)
     .lte("arrival_date", operationDate)
     .gte("departure_date", operationDate));
+  let loaded = await load(`${columns}, split_adults, split_children, split_babies, split_breakfast`);
+  if (isMissingSchema(loaded.error)) loaded = await load(columns);
+  // Partial: before 0033 the split columns are missing (read as "no split").
+  const reservations = (loaded.data ?? []) as unknown as (Omit<Database["public"]["Tables"]["reservations"]["Row"], "split_adults" | "split_children" | "split_babies" | "split_breakfast"> & Partial<Database["public"]["Tables"]["reservations"]["Row"]>)[];
+  const splits = reservationSplits(splitSources(reservations));
 
-  const reservationsForBoard: ReservationForBoard[] = (reservations ?? []).map((reservation) => ({
-    id: reservation.id,
-    roomId: reservation.room_id,
-    guestName: reservation.guest_name,
-    arrivalDate: reservation.arrival_date,
-    departureDate: reservation.departure_date,
-    adults: reservation.adults,
-    children: reservation.children,
-    babies: reservation.babies,
-    outstandingBalance: reservation.outstanding_balance,
-    currency: reservation.currency
-  }));
+  const reservationsForBoard: ReservationForBoard[] = reservations.map((reservation) => {
+    const room = splits.get(reservation.id)?.room ?? reservation;
+    return {
+      id: reservation.id,
+      roomId: reservation.room_id,
+      guestName: reservation.guest_name,
+      arrivalDate: reservation.arrival_date,
+      departureDate: reservation.departure_date,
+      adults: room.adults,
+      children: room.children,
+      babies: room.babies,
+      outstandingBalance: reservation.outstanding_balance,
+      currency: reservation.currency
+    };
+  });
+  // Breakfast chosen for the whole booking in the split dialog wins over the LH notes.
+  const breakfastFor = (reservationId: string | null, adults: number, children: number) => {
+    const chosen = reservationId ? splits.get(reservationId)?.breakfast ?? null : null;
+    if (chosen === null) return breakfastFromNotes(reservationById.get(reservationId ?? "")?.notes ?? null, adults, children);
+    return { breakfast_status: chosen ? "included" as const : "not_included" as const, breakfast_pax: chosen ? coverPax({ adults, children, babies: 0 }) : 0 };
+  };
 
+  const reservationById = new Map(reservations.map((reservation) => [reservation.id, reservation]));
   const cells = materializeBoard(units, reservationsForBoard, operationDate);
 
   const { data: existingRows } = await supabase
@@ -142,9 +162,8 @@ export async function materializeBoardForDate(params: { supabase: Client; hotelI
   );
   if (!plan.toWrite.length) return;
 
-  const reservationById = new Map((reservations ?? []).map((reservation) => [reservation.id, reservation]));
   const upsertRows = plan.toWrite.map((cell) => ({
-    ...breakfastFromNotes(reservationById.get(cell.reservationId ?? "")?.notes ?? null, cell.adults, cell.children),
+    ...breakfastFor(cell.reservationId, cell.adults, cell.children),
     booking_channel: reservationById.get(cell.reservationId ?? "")?.booking_channel ?? null,
     hotel_id: hotelId,
     operation_date: operationDate,

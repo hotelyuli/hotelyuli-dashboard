@@ -15,7 +15,7 @@ import { settledTotals } from "@/features/records/logic/settlement";
 import { boardToursFilter, toursByUnit } from "@/features/operations/logic/board-tours";
 import { BOARD_OPERATION_COLUMNS, boardOccupancy, buildBoardRows, pendingBalances } from "@/features/operations/logic/board-rows";
 import { inactiveReservations, withActiveReservations } from "@/features/operations/services/active-reservations";
-import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { reservationReferences, reservationSplitsFor } from "@/features/operations/services/reservation-references";
 
 export const metadata = { title: "Dashboard" };
 
@@ -59,10 +59,13 @@ export default async function DashboardPage() {
   const opsByRoom = new Map(rows.map((row) => [row.room_id, row]));
   const roomOptions: RoomOption[] = (rooms ?? []).map((room) => ({ id: room.id, displayName: room.display_name }));
   const toursForUnit = toursByUnit(boardTourBookings ?? [], operationDate, new Map((rooms ?? []).map((room) => [room.unit_code, opsByRoom.get(room.id)?.guest_name ?? null])));
-  const references = await reservationReferences(supabase, hotelId, rows.map((row) => row.reservation_id));
+  const [references, splits] = await Promise.all([
+    reservationReferences(supabase, hotelId, rows.map((row) => row.reservation_id)),
+    reservationSplitsFor(supabase, hotelId, rows.map((row) => row.reservation_id))
+  ]);
   // Shared selector: rows of reservations that no longer count are free rooms in every KPI below.
   const inactive = await inactiveReservations(supabase, hotelId, rows.map((row) => row.reservation_id));
-  const boardRows = buildBoardRows({ rooms: rooms ?? [], operations: rows, references, toursForUnit, inactive, es });
+  const boardRows = buildBoardRows({ rooms: rooms ?? [], operations: rows, references, toursForUnit, inactive, splits, es });
   const stayThrough = boardRows.filter((row) => row.operationalStatus === "staying").length;
   // Each booking's balance once (a booking over several rooms repeats it on every row).
   const { USD: pendingUsd, CRC: pendingCrc, bookings: pendingBookings } = pendingBalances(boardRows);

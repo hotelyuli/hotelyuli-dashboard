@@ -1,7 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { breakfastFromNotes } from "@/features/operations/logic/breakfast";
 import { sanitize } from "@/features/reports/logic/whatsapp-text";
-import { allocatePax, type PaxRow } from "@/features/operations/logic/pax";
+import { allocatePax, coverPax as roomCovers, paxTotal, splitPaxFields, type PaxRow, type ReservationSplit } from "@/features/operations/logic/pax";
 
 /**
  * "Control de desayunos": the list for breakfast on date D, sent the day before.
@@ -32,6 +32,8 @@ export type ControlEntry = {
   reference?: string | null;
   arrivalDate?: string | null;
   departureDate?: string | null;
+  /** The booking's per-room split (migration 0033). */
+  paxSplit?: ReservationSplit;
 };
 
 const WEEKDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -81,7 +83,7 @@ export function eatsBreakfastOn(reservation: Pick<ControlReservation, "arrivalDa
  * back to the reservation notes; to-go, to-go time and breakfast notes have no
  * reservation-level source, so without either row they are empty.
  */
-export function controlEntries(params: { date: string; units: ControlUnit[]; reservations: ControlReservation[]; dayRows: ControlDayRow[]; previousDayRows: ControlDayRow[] }): ControlEntry[] {
+export function controlEntries(params: { date: string; units: ControlUnit[]; reservations: ControlReservation[]; dayRows: ControlDayRow[]; previousDayRows: ControlDayRow[]; splits?: ReadonlyMap<string, ReservationSplit> }): ControlEntry[] {
   const { date, units, reservations, dayRows, previousDayRows } = params;
   const unitById = new Map(units.map((unit) => [unit.roomId, unit]));
   const rowFor = (rows: ControlDayRow[], reservation: ControlReservation) => rows.find((row) => row.roomId === reservation.roomId && row.reservationId === reservation.id);
@@ -90,7 +92,12 @@ export function controlEntries(params: { date: string; units: ControlUnit[]; res
     const unit = unitById.get(reservation.roomId);
     if (!unit) return [];
     const row = rowFor(dayRows, reservation) ?? rowFor(previousDayRows, reservation);
-    const fromNotes = breakfastFromNotes(reservation.notes, reservation.adults, reservation.children);
+    // A split booking: this room's own pax; breakfast chosen for the booking wins over the LH notes.
+    const split = params.splits?.get(reservation.id);
+    const pax = split?.room ?? reservation;
+    const fromNotes = split?.breakfast != null
+      ? { breakfast_status: split.breakfast ? "included" : "not_included", breakfast_pax: split.breakfast ? roomCovers(pax) : 0 }
+      : breakfastFromNotes(reservation.notes, pax.adults, pax.children);
     const breakfastIncluded = row ? row.breakfastStatus === "included" : fromNotes.breakfast_status === "included";
     const beds = unit.unitType === "bunk";
     return [{
@@ -98,7 +105,7 @@ export function controlEntries(params: { date: string; units: ControlUnit[]; res
       beds,
       sortOrder: unit.sortOrder,
       guestName: reservation.guestName,
-      pax: reservation.adults + reservation.children + reservation.babies,
+      pax: paxTotal(pax),
       breakfastIncluded,
       breakfastPax: breakfastIncluded ? (row ? row.breakfastPax : fromNotes.breakfast_pax) : 0,
       toGo: row?.breakfastToGo ?? false,
@@ -107,7 +114,8 @@ export function controlEntries(params: { date: string; units: ControlUnit[]; res
       reservationId: reservation.id,
       reference: reservation.reference ?? null,
       arrivalDate: reservation.arrivalDate,
-      departureDate: reservation.departureDate
+      departureDate: reservation.departureDate,
+      ...(split ? { paxSplit: split } : {})
     }];
   });
 }
@@ -121,12 +129,13 @@ export function freeRooms(units: ControlUnit[], entries: ControlEntry[]) {
 
 /** One room line, shared by the page card and the text. Room 20 beds are merged into "20 camas". */
 export type ControlLine = { room: string; label: string; beds: boolean; sortOrder: number; names: string[]; pax: number; included: boolean; breakfastPax: number; toGo: boolean; toGoTime: string | null; notes: string[];
-  /** A booking over several rooms, pax not split yet: "Reserva en 14 + 18: repartir pax" / "Misma reserva que 14". */
+  /** A booking over several rooms, pax not split yet: "Reserva en 14 + 18: reparto pendiente" / "Misma reserva que 14 · reparto pendiente". */
   stayNote: string | null };
 export type ControlSummary = { lines: ControlLine[]; free: string[]; guests: number; includedPax: number; includedRooms: number };
 
-const guestPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds });
-const coverPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds, pax: entry.breakfastPax });
+// A booking not split yet counts its whole pax once (never less: `floor`); a split one, each room's own.
+const guestPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds, ...splitPaxFields(entry.paxSplit) });
+const coverPax = (entry: ControlEntry): PaxRow => ({ ...entry, dorm: entry.beds, pax: entry.breakfastPax, ...splitPaxFields(entry.paxSplit, true) });
 
 export function summarizeBreakfastControl({ entries, free }: { entries: ControlEntry[]; free: string[] }): ControlSummary {
   const lines = new Map<string, ControlLine>();
@@ -167,7 +176,8 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
     line.breakfastPax = listed.reduce((sum, row) => sum + row.covers, 0);
     const shared = listed.find((row) => row.group && !row.group.dorm);
     if (shared?.firstRoom) {
-      line.stayNote = shared.group!.first ? `Reserva en ${(rooms.get(shared.firstRoom) ?? []).join(" + ")}: repartir pax` : `Misma reserva que ${shared.firstRoom}`;
+      const pending = shared.group!.resplit ? "la reserva cambió, repartir de nuevo" : "reparto pendiente";
+      line.stayNote = shared.group!.first ? `Reserva en ${(rooms.get(shared.firstRoom) ?? []).join(" + ")}: ${pending}` : `Misma reserva que ${shared.firstRoom} · ${pending}`;
     }
   }
 
@@ -180,6 +190,23 @@ export function summarizeBreakfastControl({ entries, free }: { entries: ControlE
     includedPax: sorted.reduce((sum, line) => sum + line.breakfastPax, 0),
     includedRooms: included.length
   };
+}
+
+/** Bookings over several rooms (not Room 20 beds) whose pax still need a split, for the "Repartir pax" buttons. */
+export function pendingSplits(entries: ControlEntry[]): { reservationId: string; reference: string; guest: string | null; rooms: string[]; pax: number; resplit: boolean }[] {
+  const groups = new Map<string, ControlEntry[]>();
+  for (const entry of entries) {
+    if (entry.beds || !entry.reservationId || !entry.reference?.trim() || entry.paxSplit?.state === "split") continue;
+    const key = `${entry.reference.trim()}|${entry.arrivalDate}`;
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  }
+  return [...groups.values()].filter((group) => group.length > 1).map((group) => {
+    const sorted = [...group].sort((a, b) => a.sortOrder - b.sortOrder);
+    return {
+      reservationId: sorted[0].reservationId!, reference: sorted[0].reference!.trim(), guest: sorted[0].guestName ? displayGuestName(sorted[0].guestName) : null,
+      rooms: sorted.map((entry) => entry.room), pax: Math.max(...group.map((entry) => entry.pax)), resplit: group.some((entry) => entry.paxSplit?.state === "resplit")
+    };
+  });
 }
 
 export const freeLabel = (free: string[]) => free.length ? free.join(", ") : "ninguna";

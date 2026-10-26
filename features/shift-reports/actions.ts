@@ -8,8 +8,8 @@ import { reportInput, canClose, type ReportInput } from "./logic";
 import { unitLabel, type ReportFacts } from "./template";
 import { composeShiftReport } from "./ai";
 import type { Json } from "@/lib/db/database.types";
-import { allocatePax, operationPaxRow } from "@/features/operations/logic/pax";
-import { reservationReferences } from "@/features/operations/services/reservation-references";
+import { allocatePax, operationPaxRow, splitPaxFields } from "@/features/operations/logic/pax";
+import { reservationReferences, reservationSplitsFor } from "@/features/operations/services/reservation-references";
 import { inactiveReservations, withActiveReservations } from "@/features/operations/services/active-reservations";
 
 async function context(input: ReportInput) {
@@ -46,9 +46,12 @@ async function context(input: ReportInput) {
   const board = (operations.data ?? []).filter((row) => !row.reservation_id || !inactive.has(row.reservation_id));
   // To-go covers per unit, each booking once (a booking over several rooms is listed on its first room).
   const dormRooms = new Set((rooms.data ?? []).filter((room) => room.unit_type === "bunk").map((room) => room.id));
-  const references = await reservationReferences(supabase, hotel, board.map((row) => row.reservation_id));
+  const [references, splits] = await Promise.all([
+    reservationReferences(supabase, hotel, board.map((row) => row.reservation_id)),
+    reservationSplitsFor(supabase, hotel, board.map((row) => row.reservation_id))
+  ]);
   const takeaway = byUnit(board.filter((row) => row.breakfast_status === "included" && row.breakfast_to_go));
-  const takeawayPax = allocatePax(takeaway.map((row) => operationPaxRow(row, dormRooms.has(row.room_id), row.breakfast_pax, row.reservation_id ? references.get(row.reservation_id) ?? null : null)));
+  const takeawayPax = allocatePax(takeaway.map((row) => operationPaxRow(row, dormRooms.has(row.room_id), row.breakfast_pax, row.reservation_id ? references.get(row.reservation_id) ?? null : null, splitPaxFields(row.reservation_id ? splits.get(row.reservation_id) : undefined, true))));
 
   const source: ReportFacts = {
     date: input.date,

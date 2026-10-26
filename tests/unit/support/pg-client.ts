@@ -7,7 +7,8 @@ import type { PGlite } from "@electric-sql/pglite";
  * "col.eq.value"), order, single / maybeSingle, { count, head } and rpc(name, namedArgs).
  */
 /** Like PostgREST: a list of strings is a Postgres array (uuid[] / text[]); other objects are jsonb. */
-const toParam = (value: unknown) => (Array.isArray(value) && value.every((item) => typeof item === "string") ? value : typeof value === "object" && value !== null ? JSON.stringify(value) : value);
+// An empty list is sent as jsonb "[]" (a jsonb argument like p_split), not as an empty Postgres array.
+const toParam = (value: unknown) => (Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string") ? value : typeof value === "object" && value !== null ? JSON.stringify(value) : value);
 
 type Filter = { sql: (index: number) => string; value?: unknown; hasValue: boolean };
 type Result = { data: unknown; error: { message: string; code?: string } | null; count?: number | null };

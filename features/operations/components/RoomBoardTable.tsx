@@ -10,7 +10,8 @@ import { dictionary, type Locale } from "@/lib/i18n";
 import { getRowHistory, moveGuest, swapRooms, updateOperationCell } from "@/features/operations/actions";
 import { BED_SETUPS, HOUSEKEEPERS, bedSetupLabel, supportsBedSetup, type BedSetup } from "@/features/operations/logic/room-setup";
 import type { BoardTour } from "@/features/operations/logic/board-tours";
-import { splitPaxWarning, type PaxGroup } from "@/features/operations/logic/pax";
+import { splitPaxWarning, type PaxGroup, type ReservationSplit } from "@/features/operations/logic/pax";
+import { SplitPaxButton } from "@/features/operations/components/SplitPaxDialog";
 
 export type BoardRow = {
   rowId: string | null;
@@ -54,8 +55,10 @@ export type BoardRow = {
   /** What this row adds to the totals: a booking over several rooms/beds counts once, on its first row. */
   countedPax: number;
   countedBreakfastPax: number;
-  /** Set when the row's booking holds several rooms or beds. */
+  /** Set when the row's booking holds several rooms or beds and its pax are not split (yet). */
   paxGroup: PaxGroup | null;
+  /** The booking's per-room split (migration 0033); null for a single-room booking or before 0033. */
+  paxSplit?: ReservationSplit | null;
   /** The stored reservation no longer counts (retired / moved in LH): the room shows free, with this note. */
   inactiveNote: string | null;
 };
@@ -408,6 +411,8 @@ function BoardPaxCell({ row, rows, locale }: { row: BoardRow; rows: BoardRow[]; 
       {row.countedPax || "—"}
       {group && !group.first && firstLabel && <small className="housekeeping-note">{es ? `Contado en ${firstLabel}` : `Counted in ${firstLabel}`}</small>}
       {warning && <span className="pax-split-badge" role="note">{warning}</span>}
+      {warning && row.reservationId && row.reference && <SplitPaxButton reservationId={row.reservationId} locale={locale} />}
+      {row.paxSplit?.state === "split" && row.reservationId && <small className="housekeeping-note">{es ? "Pax repartidos por habitación" : "Pax split per room"} <SplitPaxButton reservationId={row.reservationId} locale={locale} edit /></small>}
     </>
   );
 }

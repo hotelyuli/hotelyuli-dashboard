@@ -47,8 +47,8 @@ describe("a reservation over several rooms (no split yet)", () => {
     const r18 = rows.find((row) => row.unitCode === "18")!;
     expect([r14.countedPax, r18.countedPax]).toEqual([5, 0]);
     expect([r14.countedBreakfastPax, r18.countedBreakfastPax]).toEqual([5, 0]);
-    expect(splitPaxWarning(r14.paxGroup, true)).toBe("Reserva en 2 habitaciones – repartir pax");
-    expect(splitPaxWarning(r18.paxGroup, true)).toBe("Reserva en 2 habitaciones – repartir pax");
+    expect(splitPaxWarning(r14.paxGroup, true)).toBe("Reserva en 2 habitaciones – reparto pendiente");
+    expect(splitPaxWarning(r18.paxGroup, true)).toBe("Reserva en 2 habitaciones – reparto pendiente");
     expect(rows.reduce((sum, row) => sum + row.countedPax, 0)).toBe(5);
   });
 
@@ -56,8 +56,8 @@ describe("a reservation over several rooms (no split yet)", () => {
     render(<RoomBoardTable rows={board(marlonOps, marlonRefs)} rooms={[]} locale="es" />);
     const row = (label: string) => screen.getAllByRole("row").find((r) => within(r).queryByText(label))!;
     const paxCell = (label: string) => within(row(label)).getAllByRole("cell")[2];
-    expect(paxCell("Room 14").textContent).toBe("5Reserva en 2 habitaciones – repartir pax");
-    expect(paxCell("Room 18").textContent).toBe("—Contado en Room 14Reserva en 2 habitaciones – repartir pax");
+    expect(paxCell("Room 14").textContent).toBe("5Reserva en 2 habitaciones – reparto pendienteRepartir pax");
+    expect(paxCell("Room 18").textContent).toBe("—Contado en Room 14Reserva en 2 habitaciones – reparto pendienteRepartir pax");
     expect(paxCell("Room 3").textContent).toBe("—");
   });
 
@@ -67,18 +67,18 @@ describe("a reservation over several rooms (no split yet)", () => {
     const entries = controlEntries({ date: D, units, reservations, dayRows: [], previousDayRows: [] });
     const summary = summarizeBreakfastControl({ entries, free: freeRooms(units, entries) });
     expect(summary.lines.map((line) => [line.label, line.pax, line.breakfastPax, line.stayNote])).toEqual([
-      ["14", 5, 5, "Reserva en 14 + 18: repartir pax"],
-      ["18", 0, 0, "Misma reserva que 14"]
+      ["14", 5, 5, "Reserva en 14 + 18: reparto pendiente"],
+      ["18", 0, 0, "Misma reserva que 14 · reparto pendiente"]
     ]);
     expect(summary).toMatchObject({ guests: 5, includedPax: 5 });
     const text = formatBreakfastControl({ date: D, summary });
-    expect(text).toContain("14 · Marlon Camacho Rodriguez · 5 pax · ✅ DESAYUNO INCLUIDO · Reserva en 14 + 18: repartir pax");
+    expect(text).toContain("14 · Marlon Camacho Rodriguez · 5 pax · ✅ DESAYUNO INCLUIDO · Reserva en 14 + 18: reparto pendiente");
     expect(text).toContain("Con desayuno incluido: 5 pax");
     expect(formatBreakfastControlWhatsApp({ date: D, summary })).toContain("*Con desayuno incluido: 5 pax (2 hab.)*");
 
     render(<BreakfastControlCard date={D} generatedAt={new Date("2026-10-22T18:00:00Z")} summary={summary} />);
     expect(screen.getByTestId("control-included").textContent).toBe("5");
-    expect(screen.getByText("Misma reserva que 14")).toBeInTheDocument();
+    expect(screen.getByText("Misma reserva que 14 · reparto pendiente")).toBeInTheDocument();
 
     const boardRows = board(marlonOps, marlonRefs);
     expect(boardRows.reduce((sum, row) => sum + row.countedBreakfastPax, 0)).toBe(summary.includedPax);
@@ -94,7 +94,7 @@ describe("a reservation over several rooms (no split yet)", () => {
   it("the printed board counts it once and prints the warning", () => {
     const summary = summarizeBoardSheet(board(marlonOps, marlonRefs));
     expect(summary.pax).toBe(5);
-    expect(summary.lines.find((line) => line.label === "18")?.statusNotes).toContain("Reserva en 2 habitaciones – repartir pax");
+    expect(summary.lines.find((line) => line.label === "18")?.statusNotes).toContain("Reserva en 2 habitaciones – reparto pendiente");
   });
 });
 

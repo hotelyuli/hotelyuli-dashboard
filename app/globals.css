@@ -152,6 +152,14 @@ h1, h2, .metric-card strong, .wordmark strong { font-family: var(--font-display)
 .lh-paid-chip { display: inline-block; margin-left: 24px; padding: 1px 8px; border-radius: 10px; background: #e8eef7; color: #2f4f7a; font-size: .72rem; font-weight: 600; }
 /* A booking over several rooms whose pax is not split yet: visible on each of its rows. */
 .pax-split-badge { display: block; margin-top: 3px; padding: 2px 7px; border-radius: 10px; background: #fbeee0; color: #8a4b1f; font-size: .68rem; font-weight: 600; white-space: nowrap; width: fit-content; }
+.split-pax-button { margin-top: 4px; padding: .2rem .55rem; font-size: .72rem; }
+.split-pax-modal { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+.split-pax-tools { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin: .5rem 0; }
+.split-pax-table input { width: 4.2rem; }
+.split-pax-table .split-pax-off { color: #9d3333; }
+.split-pending ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+.split-pending li { margin: .35rem 0; }
+@media print { .split-pending { display: none; } }
 .status-badge { display: inline-block; padding: .28rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 700; border: 1px solid var(--line); }
 .status-badge.status-check_in { background: #eef4ea; color: #3f6b2e; border-color: #cfe3c4; }
 .status-badge.status-staying { background: #eaf1f4; color: #2e5b6b; border-color: #c4dde3; }
